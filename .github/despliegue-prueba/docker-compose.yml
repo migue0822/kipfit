@@ -1,0 +1,23 @@
+# Hace de OrdenKipu en el workflow de despliegue: un Caddy con los puertos 80/443 que importa sitios/*.caddy y
+# crea la red "kipu", igual que el de erp-pyme.
+name: ordenkipu-prueba
+services:
+  web:
+    image: caddy:2
+    ports:
+      - '80:80'
+      - '443:443'
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./sitios:/etc/caddy/sitios:ro
+    networks: [kipu]
+  # Hace de la API de OrdenKipu: llama a la API de plataforma de Kipfit por la red kipu-api.
+  consola:
+    image: curlimages/curl:8.11.1
+    command: ['sleep', 'infinity']
+    networks: [kipu-api]
+networks:
+  kipu:
+    name: kipu
+  kipu-api:
+    name: kipu-api

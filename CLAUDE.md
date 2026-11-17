@@ -1,0 +1,110 @@
+# Kipfit — guía para Claude Code
+
+Gestión web multi-empresa de gimnasios (familia KIPU): afiliados, planes, control de ingreso en la entrada
+con una tablet (tiempo real hacia recepción) y cobros. Migración a la web de la app de escritorio "Control de
+Gimnasio". Usa el mismo stack y las mismas reglas base que OrdenKipu (`migue0822/erp-pyme`) y AviKipu
+(`migue0822/avikipu`), de los que se tomó el núcleo (autenticación, empresas, sucursales, usuarios, roles, RLS,
+licencias). El plan vive en el documento "Plan de migración a web – Control de Gimnasio".
+
+## Stack
+
+- Monorepo pnpm + Turborepo. Solo TypeScript.
+- `apps/api`: NestJS (CommonJS), Prisma 7 con `@prisma/adapter-pg`, PostgreSQL.
+- `apps/web`: React + Vite (SPA), Tailwind (tonos `stone` + acento `amber`, heredados de AviKipu; la identidad propia se define después), TanStack Query.
+- `packages/shared` (`@kip/shared`): esquemas Zod, tipos y utilidades de API y web.
+- Pruebas con Vitest y suites de punta a punta en `apps/api/e2e`.
+
+## Comandos
+
+```bash
+pnpm install
+pnpm db:up                         # Postgres en Docker (puerto 5434, para no chocar con OrdenKipu)
+cp .env.example apps/api/.env
+pnpm --filter @kip/api db:migrate
+pnpm dev                           # API :3002 y web :5175
+pnpm typecheck && pnpm test && pnpm build
+pnpm --filter @kip/api e2e         # después de build; requiere psql
+```
+
+## Reglas no negociables
+
+1. **Dinero exacto:** `Decimal(18,2)` para valores, `Decimal(18,4)` para costos. Viajan como texto.
+2. **Aislamiento por empresa:** toda tabla de negocio lleva `empresa_id`; toda consulta filtra por la
+   empresa de la sesión. RLS es la segunda barrera: una tabla nueva con `empresa_id` trae en su migración
+   `ENABLE ROW LEVEL SECURITY` + la política `aislamiento_empresa` (lo verifica la suite e2e `rls`).
+3. **Sucursales desde el inicio:** numeraciones, ingresos y cobros son por sucursal.
+4. **Nada se borra:** documentos se anulan; maestros y presentaciones se inactivan. Cambios a `auditoria`.
+5. **Consecutivos** con `tomarConsecutivo` (bloqueo `FOR UPDATE` en `numeracion`) dentro de la
+   transacción del documento. Prefijos (`PREFIJOS` en `comun/numeracion.ts`) + código de sucursal:
+   hoy solo `RC` recibo; los demás se agregan con cada módulo.
+6. **Un documento = una transacción.**
+7. **Fechas** en UTC (`timestamptz`), se muestran en America/Bogota.
+8. **Permisos en el backend** (`@RequierePermiso`); el catálogo está en `packages/shared/src/permisos.ts`
+   (todo permiso nuevo también en `CATALOGO_PERMISOS`, lo verifica una prueba).
+9. **Autenticación propia:** sesiones en servidor (cookie httpOnly `kip_sesion`), Argon2.
+
+## Estado y diseño (Etapa 0 hecha)
+
+- Núcleo: autenticación, empresas, sucursales, usuarios, roles, auditoría, RLS (`kip_app`) y licencias/planes/pagos.
+  Permisos en `packages/shared/src/permisos.ts` (empresa, sucursales, usuarios, afiliados, ingresos, informes) y roles
+  sugeridos Recepción y Supervisor. Las pantallas de afiliados e ingreso aparecen como "Próximamente".
+- Migraciones: armadas a mano desde las de AviKipu (no verificadas con `prisma migrate diff`); verifíquelas con
+  `scripts/verificar-migraciones.sh` en CI antes de desplegar. `ventasMes` de la consola vale 0 hasta contar los
+  ingresos del mes (Etapa 2).
+- Reglas de diseño para el modo sin conexión (futuro): ids de cliente (UUID), operaciones idempotentes, marcas de
+  tiempo del cliente y consecutivos asignados por el servidor al sincronizar.
+- Tiempo real de la ventana de ingreso: SSE (aún no existe en OrdenKipu).
+
+## Registro de empresas, licencias y demostraciones (`apps/api/src/plataforma`, `@kip/shared` `plataforma.ts`)
+
+- Página de ingreso → "Registrarla". `REGISTRO_PUBLICO=no` lo cierra; con `REGISTRO_CODIGO` queda abierto
+  solo para quien tenga el código. Quien se registra queda en **demostración** de `DEMO_DIAS` días (15; 0 = sin
+  vencimiento).
+- **Licencia** en `empresa` (como OrdenKipu): `plan_id`, `pagado_hasta` (date, inclusive; null = sin vencimiento),
+  `licencia_estado` ACTIVA | SUSPENDIDA | RETIRADA (`activa = false`). `enDemo` = con vencimiento y sin pagos
+  vigentes. Vencida o suspendida = **solo lectura** (`SesionGuard`: nada que no sea GET en rutas con empresa,
+  `mensajeSoloLectura`) salvo `@PermitidoEnSoloLectura()`. `perfil.empresa.licencia` →
+  `AvisoLicencia` en el menú. `plan` (sin `empresa_id`: precio, `max_usuarios`, `max_sucursales`;
+  `exigirCupoPlan` al crear o reactivar) y `pago_licencia` (RLS; `kip_app` no escribe ninguno de los dos).
+- **Se administra desde la consola de plataforma de OrdenKipu** (selector de sistema): `/plataforma/*`
+  (empresas, licencia, pagos, anular, planes) con las mismas formas de respuesta que OrdenKipu. Sin sesión de
+  Kipfit (`@Publico()` + `ClavePlataformaGuard`: cabecera `X-Plataforma-Clave` = `PLATAFORMA_CLAVE`, mínimo 16
+  caracteres, vacía = 404; `X-Plataforma-Usuario` = quién, va a `auditoria.despues.por` y a
+  `pago_licencia.registrado_por`). Solo por la red de Docker `kipu-api` (`kipfit-api:3002`); el Caddy interno
+  responde 404 a `/api/v1/plataforma*` desde internet. Suite e2e `plataforma`.
+
+## Despliegue (`despliegue/`, guía en `despliegue/LEAME.md`)
+
+- En el **mismo servidor de OrdenKipu**, con su dominio de DuckDNS. `Dockerfile` (raíz): `api` (aplica
+  `prisma migrate deploy` al arrancar, puerto 3002) y `web` (Caddy **interno** sin HTTPS: SPA y `/api` → API).
+  `despliegue/docker-compose.yml` (proyecto `kipfit`): postgres, api, web y respaldo; sin puertos publicados.
+- El HTTPS lo pone el Caddy de OrdenKipu: importa `~/erp-pyme/despliegue/sitios/*.caddy` y comparte la red de Docker
+  `kipu` (la crea OrdenKipu; aquí es `external`; la API además está en `kipu-api` para la consola). `conectar.sh` escribe `sitio.caddy` con el `DOMINIO` de `.env` y
+  recarga ese Caddy; el web de Kipfit está en `kipu` con el alias `kipfit-web`. Dos Caddy delante → `TRUST_PROXY=2`
+  y el interno confía en `private_ranges`.
+- Respaldos (`despliegue/respaldo/`, `kip-*.dump`, 2:45), `actualizar.sh` y `recuperar.sh` como en OrdenKipu; la nube
+  usa la misma conexión de rclone en otra carpeta. El workflow `despliegue.yml` lo prueba detrás de un Caddy que hace
+  de OrdenKipu (`.github/despliegue-prueba/`): HTTPS, registro con código, cookie segura, IP real, respaldo y
+  recuperación desde la "nube".
+
+## Migraciones
+
+- Cada cambio de `schema.prisma` va con su carpeta en `prisma/migrations`. Los índices parciales y las
+  reglas `CHECK` solo existen en el SQL. El CI (`base-de-datos`) aplica las migraciones a un PostgreSQL
+  real, verifica que coincidan con el esquema (`scripts/verificar-migraciones.sh`; un índice parcial nuevo
+  se agrega ahí a `PROPIOS_DEL_SQL`) y corre las suites e2e.
+
+## Convenciones
+
+- Dominio en español; términos técnicos en inglés. Base en `snake_case` (`@map`), código en `camelCase`.
+- API REST bajo `/api/v1`. Validar con los esquemas Zod de `@kip/shared` (`ZodPipe`).
+- Mensajes al usuario en español, tratando de "usted".
+- Git: `main` siempre desplegable; ramas por funcionalidad; commits `feat:`, `fix:`, `chore:`, `docs:`.
+
+## Plan
+
+1. ✅ Etapa 0: esqueleto Kipfit (núcleo de AviKipu), licencias desde la consola de OrdenKipu.
+2. Afiliados y planes (fichas, vencimientos, importación del Excel/SQLite de escritorio cuando se necesite).
+3. Ingreso: ventana para tablet con SSE hacia recepción.
+4. Cobros, caja e informes; contrato de licencia adaptable a cada app KIPU.
+5. Respaldos y despliegue en el servidor de Oracle junto a OrdenKipu y AviKipu; modo sin conexión (explorar).

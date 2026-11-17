@@ -1,0 +1,97 @@
+# Producción en el servidor de OrdenKipu. Uso (desde esta carpeta, con .env lleno):
+#   docker compose up -d --build && ./conectar.sh
+# Guía completa: despliegue/LEAME.md
+name: kipfit
+
+services:
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: kip
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Falta POSTGRES_PASSWORD en despliegue/.env}
+      POSTGRES_DB: kipfit
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    shm_size: 128mb
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U kip -d kipfit']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    # Sin puertos publicados: la base solo se alcanza desde los otros contenedores.
+
+  api:
+    build:
+      context: ..
+      target: api
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://kip:${POSTGRES_PASSWORD}@postgres:5432/kipfit
+      NODE_ENV: production
+      PORT: 3002
+      # Delante hay dos Caddy (el de OrdenKipu y el interno): la IP real viene en X-Forwarded-For.
+      TRUST_PROXY: 2
+      WEB_ORIGIN: https://${DOMINIO:?Falta DOMINIO en despliegue/.env}
+      REGISTRO_CODIGO: ${REGISTRO_CODIGO:-}
+      REGISTRO_PUBLICO: ${REGISTRO_PUBLICO:-no}
+      # Días de demostración de quien se registra con el código (0 = sin vencimiento).
+      DEMO_DIAS: ${DEMO_DIAS:-15}
+      # Clave de la consola de plataforma de OrdenKipu (la misma KIPFIT_CLAVE de su .env). Vacía = apagada.
+      PLATAFORMA_CLAVE: ${PLATAFORMA_CLAVE:-}
+    # La consola de OrdenKipu llega a la API por la red kipu-api con el nombre kipfit-api.
+    networks:
+      default:
+      kipu-api:
+        aliases: [kipfit-api]
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  web:
+    build:
+      context: ..
+      target: web
+    restart: unless-stopped
+    # Sin puertos: lo atiende el Caddy de OrdenKipu por la red kipu con el nombre kipfit-web.
+    networks:
+      default:
+      kipu:
+        aliases: [kipfit-web]
+    depends_on:
+      - api
+
+  respaldo:
+    build: ./respaldo
+    restart: unless-stopped
+    environment:
+      PGHOST: postgres
+      PGUSER: kip
+      PGPASSWORD: ${POSTGRES_PASSWORD}
+      PGDATABASE: kipfit
+      TZ: America/Bogota
+      RESPALDO_HORA: ${RESPALDO_HORA:-02:45}
+      RESPALDO_DIAS: ${RESPALDO_DIAS:-14}
+      RESPALDO_DIAS_NUBE: ${RESPALDO_DIAS_NUBE:-60}
+      RCLONE_DESTINO: ${RCLONE_DESTINO:-}
+      RESPALDO_AVISO_URL: ${RESPALDO_AVISO_URL:-}
+    volumes:
+      - ./respaldos:/respaldos
+      - ./rclone:/config/rclone
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+networks:
+  # Las crea OrdenKipu (su docker-compose.yml): OrdenKipu debe estar instalado y arrancado antes.
+  # kipu: los Caddy (HTTPS). kipu-api: las API (consola de plataforma). Separadas para que los nombres
+  # "api" y "web" de cada sistema no se crucen.
+  kipu:
+    external: true
+    name: kipu
+  kipu-api:
+    external: true
+    name: kipu-api
+
+volumes:
+  pgdata:

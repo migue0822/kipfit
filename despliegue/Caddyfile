@@ -1,0 +1,35 @@
+# Caddy interno de Kipfit: sin HTTPS ni puertos en el servidor. Lo atiende el Caddy de OrdenKipu (el que tiene
+# los puertos 80/443 y los certificados) por la red de Docker "kipu" (ver sitio.caddy y conectar.sh).
+{
+	auto_https off
+	admin off
+	servers {
+		# Confía en el Caddy de adelante: así la API ve la IP real del cliente (X-Forwarded-For).
+		trusted_proxies static private_ranges
+	}
+}
+
+:80 {
+	encode zstd gzip
+
+	# La API de plataforma solo la usa la consola de OrdenKipu por la red interna "kipu-api", nunca desde internet.
+	handle /api/v1/plataforma* {
+		respond 404
+	}
+
+	handle /api/* {
+		reverse_proxy api:3002
+	}
+
+	handle {
+		root * /srv
+		# Los archivos de /assets llevan huella en el nombre: se guardan en caché un año.
+		@assets path /assets/*
+		header @assets Cache-Control "public, max-age=31536000, immutable"
+		# index.html siempre fresco, para que una actualización llegue de inmediato.
+		@pagina path / /index.html
+		header @pagina Cache-Control "no-cache"
+		try_files {path} /index.html
+		file_server
+	}
+}

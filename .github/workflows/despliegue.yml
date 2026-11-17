@@ -1,0 +1,113 @@
+name: Despliegue
+
+# Construye las imágenes de producción y levanta Kipfit como en el servidor: detrás de un Caddy que hace de
+# OrdenKipu (red kipu, conectar.sh), migraciones desde cero, registro con código, respaldo con prueba de
+# restauración y la recuperación completa desde la copia en la "nube" (recuperar.sh).
+on:
+  pull_request:
+    paths:
+      - 'Dockerfile'
+      - '.dockerignore'
+      - 'despliegue/**'
+      - '.github/despliegue-prueba/**'
+      - 'apps/api/prisma/**'
+      - 'pnpm-lock.yaml'
+      - '.github/workflows/despliegue.yml'
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  stack:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: despliegue
+    env:
+      DOMINIO: kipfit.localhost
+      POSTGRES_PASSWORD: ci0123456789abcdef
+      REGISTRO_CODIGO: codigo-ci
+      PLATAFORMA_CLAVE: clave-plataforma-ci-0123456789
+      ORDENKIPU_DIR: ${{ github.workspace }}/.github/despliegue-prueba
+      # La "nube" del CI es una carpeta local del contenedor: rclone la trata igual que Drive.
+      RCLONE_DESTINO: /respaldos/nube-ci
+    steps:
+      - uses: actions/checkout@v4
+      - name: OrdenKipu (de prueba) arrancado
+        working-directory: .github/despliegue-prueba
+        run: mkdir -p sitios && docker compose up -d --wait
+      - name: Construir, arrancar y conectar
+        run: |
+          env | grep -E '^(DOMINIO|POSTGRES_PASSWORD|REGISTRO_CODIGO|PLATAFORMA_CLAVE|ORDENKIPU_DIR|RCLONE_DESTINO)=' > .env
+          docker compose up -d --build --wait --wait-timeout 300
+          ./conectar.sh
+          grep -q 'kipfit.localhost {' ../.github/despliegue-prueba/sitios/kipfit.caddy
+      - name: Probar por HTTPS a través del Caddy de OrdenKipu
+        run: |
+          C="curl -sSk --resolve kipfit.localhost:443:127.0.0.1"
+          U=https://kipfit.localhost
+          $C -f $U/api/v1/salud
+          $C -f $U/ | grep -q '<div id="root">'
+          $C -f $U/vender | grep -q '<div id="root">'
+          $C -D - -o /dev/null $U/ | grep -qi 'strict-transport-security'
+          # OrdenKipu sigue en lo suyo.
+          curl -fsSk --resolve ordenkipu.localhost:443:127.0.0.1 https://ordenkipu.localhost/ | grep -q OrdenKipu
+          # Registro: solo con el código.
+          test "$($C $U/api/v1/auth/registro)" = '{"requiereCodigo":true,"abierto":true}'
+          R='{"empresa":{"nit":"900123456","dv":8,"razonSocial":"Gimnasio CI SAS"},"usuario":{"nombre":"CI","email":"ci@example.com","password":"clave-segura-123"}'
+          test "$($C -o /dev/null -w '%{http_code}' -X POST $U/api/v1/auth/registro -H 'content-type: application/json' -d "$R}")" = 403
+          test "$($C -o /dev/null -w '%{http_code}' -X POST $U/api/v1/auth/registro -H 'content-type: application/json' -d "$R,\"codigoRegistro\":\"codigo-ci\"}")" = 201
+          # Ingreso con cookie segura y una consulta con empresa (RLS en la base de producción).
+          $C -c sesion.txt -D cabeceras.txt -o /dev/null -X POST $U/api/v1/auth/login -H 'content-type: application/json' -d '{"email":"ci@example.com","password":"clave-segura-123"}'
+          grep -i 'set-cookie: kip_sesion' cabeceras.txt | grep -qi secure
+          $C -f -b sesion.txt $U/api/v1/sucursales | grep -q "Principal"
+          # Sin código no se registra (REGISTRO_PUBLICO=no por defecto).
+          REGISTRO_CODIGO= docker compose up -d --wait api
+          test "$($C $U/api/v1/auth/registro)" = '{"requiereCodigo":false,"abierto":false}'
+          docker compose up -d --wait api
+      - name: API de plataforma solo por la red interna
+        run: |
+          C="curl -sSk --resolve kipfit.localhost:443:127.0.0.1 -o /dev/null -w %{http_code}"
+          # Desde internet no existe, ni con la clave.
+          test "$($C -H 'x-plataforma-clave: clave-plataforma-ci-0123456789' -H 'x-plataforma-usuario: CI' https://kipfit.localhost/api/v1/plataforma/empresas)" = 404
+          # La "API de OrdenKipu" por kipu-api: sin clave no, con clave sí (y ve la empresa registrada en demo).
+          P="docker compose -f ../.github/despliegue-prueba/docker-compose.yml exec -T consola curl -s"
+          test "$($P -o /dev/null -w '%{http_code}' http://kipfit-api:3002/api/v1/plataforma/empresas)" = 401
+          $P -H 'x-plataforma-clave: clave-plataforma-ci-0123456789' -H 'x-plataforma-usuario: CI <ci@example.com>' \
+            http://kipfit-api:3002/api/v1/plataforma/empresas | tee empresas.json
+          grep -q '"razonSocial":"Gimnasio CI SAS"' empresas.json
+          grep -q '"enDemo":true' empresas.json
+      - name: La API ve la IP real del cliente
+        run: |
+          # Tras dos Caddy (TRUST_PROXY=2) la sesión guarda la IP de quien llegó al Caddy de OrdenKipu (aquí, la
+          # puerta de enlace de Docker), no la de ese Caddy; y un X-Forwarded-For inventado no se cree.
+          curl -sSk --resolve kipfit.localhost:443:127.0.0.1 -o /dev/null -X POST https://kipfit.localhost/api/v1/auth/login \
+            -H 'content-type: application/json' -H 'x-forwarded-for: 203.0.113.7' \
+            -d '{"email":"ci@example.com","password":"clave-segura-123"}'
+          ip=$(docker compose exec -T postgres psql -U kip -d kipfit -Atc 'SELECT ip FROM sesion ORDER BY creado_en DESC LIMIT 1')
+          frontal=$(docker inspect -f '{{(index .NetworkSettings.Networks "kipu").IPAddress}}' ordenkipu-prueba-web-1)
+          echo "IP en la sesión: $ip; Caddy de OrdenKipu: $frontal"
+          test -n "$ip" && test "$ip" != "$frontal" && test "$ip" != 203.0.113.7
+      - name: Respaldo y prueba de restauración
+        run: |
+          docker compose exec -T respaldo respaldar.sh | tee respaldo.txt
+          grep -q 'Copia en la nube al día' respaldo.txt
+          ls respaldos/nube-ci/diarios/kip-*.dump
+          docker compose exec -T respaldo probar-restauracion.sh | tee restauracion.txt
+          grep -q '1 empresas' restauracion.txt
+      - name: Simulacro y recuperación tras perder la base
+        run: |
+          ./recuperar.sh --simulacro | tee simulacro.txt
+          grep -q 'Simulacro correcto' simulacro.txt
+          # Pérdida total: sin la base ni los respaldos del servidor; solo queda la copia en la "nube".
+          docker compose stop api
+          docker compose exec -T respaldo sh -c 'dropdb --force kipfit && createdb kipfit && rm -f /respaldos/diarios/*.dump'
+          echo SI | ./recuperar.sh | tee recuperar.txt
+          grep -q '1 empresas' recuperar.txt
+          test "$(curl -sSk --resolve kipfit.localhost:443:127.0.0.1 -o /dev/null -w '%{http_code}' -X POST https://kipfit.localhost/api/v1/auth/login -H 'content-type: application/json' -d '{"email":"ci@example.com","password":"clave-segura-123"}')" = 200
+      - name: Registros si falla
+        if: failure()
+        run: |
+          docker compose ps -a && docker compose logs --tail 200
+          docker compose -f ../.github/despliegue-prueba/docker-compose.yml logs --tail 100

@@ -1,0 +1,57 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  verificar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm format:check
+      - run: pnpm typecheck
+      - run: pnpm test
+      - run: pnpm build
+
+  # Migraciones contra PostgreSQL real: que coincidan con schema.prisma y pruebas de punta a punta.
+  base-de-datos:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: kip
+          POSTGRES_PASSWORD: kip
+          POSTGRES_DB: kipfit
+        ports: ['5434:5432']
+        options: >-
+          --health-cmd "pg_isready -U kip" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://kip:kip@localhost:5434/kipfit
+      PGPASSWORD: kip
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - name: Aplicar migraciones
+        working-directory: apps/api
+        run: pnpm db:migrate
+      - name: Las migraciones coinciden con schema.prisma
+        working-directory: apps/api
+        run: bash scripts/verificar-migraciones.sh
+      - name: Pruebas de punta a punta
+        working-directory: apps/api
+        run: pnpm e2e

@@ -1,0 +1,12 @@
+# Sitio de Kipfit en el Caddy de OrdenKipu. conectar.sh lo copia a ~/erp-pyme/despliegue/sitios/kipfit.caddy
+# cambiando DOMINIO_KIPFIT por el dominio de despliegue/.env. Ese Caddy saca y renueva el certificado HTTPS.
+DOMINIO_KIPFIT {
+	header {
+		Strict-Transport-Security "max-age=31536000"
+		X-Content-Type-Options nosniff
+		X-Frame-Options SAMEORIGIN
+		Referrer-Policy strict-origin-when-cross-origin
+		-Server
+	}
+	reverse_proxy kipfit-web:80
+}

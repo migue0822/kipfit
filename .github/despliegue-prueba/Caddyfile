@@ -1,0 +1,6 @@
+# Como el Caddyfile de OrdenKipu: su propio sitio + los de otros sistemas.
+ordenkipu.localhost {
+	respond "OrdenKipu"
+}
+
+import /etc/caddy/sitios/*.caddy

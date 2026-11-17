@@ -1,0 +1,15 @@
+# Base de datos para desarrollo local.
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: kip
+      POSTGRES_PASSWORD: kip
+      POSTGRES_DB: kipfit
+    ports:
+      - '5434:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:

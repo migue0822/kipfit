@@ -1,0 +1,219 @@
+// Kipfit — gestión de gimnasios.
+// Reglas: toda tabla de negocio lleva empresa_id; dinero en Decimal; nada se borra (se anula/inactiva).
+
+generator client {
+  provider     = "prisma-client"
+  output       = "../src/generated/prisma"
+  moduleFormat = "cjs"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ───────────── Núcleo ─────────────
+
+model Empresa {
+  id              String    @id @default(uuid()) @db.Uuid
+  nit             String    @unique
+  dv              Int       @db.SmallInt
+  razonSocial     String    @map("razon_social")
+  nombreComercial String?   @map("nombre_comercial")
+  direccion       String?
+  telefono        String?
+  email           String?
+  activa          Boolean   @default(true)
+  creadoEn        DateTime  @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn   DateTime  @updatedAt @map("actualizado_en") @db.Timestamptz
+  /// Licencia (consola de plataforma): plan, último día pagado (null = sin vencimiento), estado y notas.
+  planId          String?   @map("plan_id") @db.Uuid
+  pagadoHasta     DateTime? @map("pagado_hasta") @db.Date
+  licenciaEstado  String    @default("ACTIVA") @map("licencia_estado")
+  licenciaNotas   String?   @map("licencia_notas")
+
+  plan           Plan?                  @relation(fields: [planId], references: [id])
+  pagosLicencia  PagoLicencia[]
+  sucursales     Sucursal[]
+  membresias     Membresia[]
+  roles          Rol[]
+  numeraciones   Numeracion[]
+  sesiones       Sesion[]
+  auditoria      Auditoria[]
+
+  @@map("empresa")
+}
+
+model Sucursal {
+  id        String   @id @default(uuid()) @db.Uuid
+  empresaId String   @map("empresa_id") @db.Uuid
+  codigo    String
+  nombre    String
+  direccion String?
+  telefono  String?
+  activa    Boolean  @default(true)
+  creadoEn  DateTime @default(now()) @map("creado_en") @db.Timestamptz
+
+  empresa      Empresa                @relation(fields: [empresaId], references: [id])
+  numeraciones Numeracion[]
+  accesos      MembresiaSucursal[]
+  sesiones     Sesion[]
+
+  @@unique([empresaId, codigo])
+  @@index([empresaId])
+  @@map("sucursal")
+}
+
+model Usuario {
+  id            String   @id @default(uuid()) @db.Uuid
+  email         String   @unique
+  nombre        String
+  hashPassword  String   @map("hash_password")
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn DateTime @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  membresias     Membresia[]
+  sesiones       Sesion[]
+
+  @@map("usuario")
+}
+
+// Sesiones guardadas en servidor: se pueden revocar a distancia.
+model Sesion {
+  id         String    @id // hash del token; el token en claro solo vive en la cookie
+  usuarioId  String    @map("usuario_id") @db.Uuid
+  empresaId  String?   @map("empresa_id") @db.Uuid
+  sucursalId String?   @map("sucursal_id") @db.Uuid
+  expiraEn   DateTime  @map("expira_en") @db.Timestamptz
+  ip         String?
+  agente     String?
+  revocadaEn DateTime? @map("revocada_en") @db.Timestamptz
+  creadoEn   DateTime  @default(now()) @map("creado_en") @db.Timestamptz
+
+  usuario  Usuario   @relation(fields: [usuarioId], references: [id])
+  empresa  Empresa?  @relation(fields: [empresaId], references: [id])
+  sucursal Sucursal? @relation(fields: [sucursalId], references: [id])
+
+  @@index([usuarioId])
+  @@map("sesion")
+}
+
+model Rol {
+  id        String   @id @default(uuid()) @db.Uuid
+  empresaId String   @map("empresa_id") @db.Uuid
+  nombre    String
+  permisos  String[] // códigos de packages/shared/src/permisos.ts; "*" = Administrador
+  activo    Boolean  @default(true)
+
+  empresa    Empresa     @relation(fields: [empresaId], references: [id])
+  membresias Membresia[]
+
+  @@unique([empresaId, nombre])
+  @@map("rol")
+}
+
+model Membresia {
+  id        String  @id @default(uuid()) @db.Uuid
+  usuarioId String  @map("usuario_id") @db.Uuid
+  empresaId String  @map("empresa_id") @db.Uuid
+  rolId     String  @map("rol_id") @db.Uuid
+  activa    Boolean @default(true)
+
+  usuario    Usuario             @relation(fields: [usuarioId], references: [id])
+  empresa    Empresa             @relation(fields: [empresaId], references: [id])
+  rol        Rol                 @relation(fields: [rolId], references: [id])
+  sucursales MembresiaSucursal[]
+
+  @@unique([usuarioId, empresaId])
+  @@map("membresia")
+}
+
+// Sucursales a las que puede entrar cada usuario dentro de una empresa.
+// Sin filas para una membresía = acceso a todas las sucursales de la empresa.
+model MembresiaSucursal {
+  membresiaId String @map("membresia_id") @db.Uuid
+  sucursalId  String @map("sucursal_id") @db.Uuid
+
+  membresia Membresia @relation(fields: [membresiaId], references: [id])
+  sucursal  Sucursal  @relation(fields: [sucursalId], references: [id])
+
+  @@id([membresiaId, sucursalId])
+  @@map("membresia_sucursal")
+}
+
+// Consecutivos internos por sucursal y tipo de documento (ventas, compras, ajustes, caja…).
+model Numeracion {
+  id            String  @id @default(uuid()) @db.Uuid
+  empresaId     String  @map("empresa_id") @db.Uuid
+  sucursalId    String  @map("sucursal_id") @db.Uuid
+  tipoDocumento String  @map("tipo_documento")
+  prefijo       String  @default("")
+  actual        BigInt  @default(0) // último número usado; se toma con bloqueo de fila
+  activa        Boolean @default(true)
+
+  empresa  Empresa  @relation(fields: [empresaId], references: [id])
+  sucursal Sucursal @relation(fields: [sucursalId], references: [id])
+
+  @@unique([sucursalId, tipoDocumento])
+  @@index([empresaId])
+  @@map("numeracion")
+}
+
+model Auditoria {
+  id         BigInt   @id @default(autoincrement())
+  empresaId  String   @map("empresa_id") @db.Uuid
+  sucursalId String?  @map("sucursal_id") @db.Uuid
+  usuarioId  String?  @map("usuario_id") @db.Uuid
+  entidad    String
+  entidadId  String   @map("entidad_id")
+  accion     String
+  antes      Json?
+  despues    Json?
+  fecha      DateTime @default(now()) @db.Timestamptz
+
+  empresa Empresa @relation(fields: [empresaId], references: [id])
+
+  @@index([empresaId, entidad, entidadId])
+  @@map("auditoria")
+}
+
+/// Plan de Kipfit (sin empresa_id): precio y límites. Lo administra la consola de plataforma.
+model Plan {
+  id            String   @id @default(uuid()) @db.Uuid
+  nombre        String   @unique
+  precioMensual Decimal  @map("precio_mensual") @db.Decimal(18, 2)
+  /// Usuarios y sucursales activos permitidos (null = sin límite).
+  maxUsuarios   Int?     @map("max_usuarios")
+  maxSucursales Int?     @map("max_sucursales")
+  activo        Boolean  @default(true)
+  creadoEn      DateTime @default(now()) @map("creado_en") @db.Timestamptz
+
+  empresas Empresa[]
+
+  @@map("plan")
+}
+
+/// Pago de la licencia: corre `empresa.pagado_hasta`; anularlo lo devuelve a `pagado_hasta_anterior`.
+model PagoLicencia {
+  id                  String    @id @default(uuid()) @db.Uuid
+  empresaId           String    @map("empresa_id") @db.Uuid
+  fecha               DateTime  @db.Date
+  meses               Int
+  valor               Decimal   @db.Decimal(18, 2)
+  medio               String
+  referencia          String?
+  observaciones       String?
+  pagadoHastaAnterior DateTime? @map("pagado_hasta_anterior") @db.Date
+  pagadoHasta         DateTime  @map("pagado_hasta") @db.Date
+  /// Quien lo registró en la consola (nombre y correo del administrador de la plataforma).
+  registradoPor       String    @map("registrado_por")
+  anulado             Boolean   @default(false)
+  motivoAnulacion     String?   @map("motivo_anulacion")
+  anuladoEn           DateTime? @map("anulado_en") @db.Timestamptz
+  creadoEn            DateTime  @default(now()) @map("creado_en") @db.Timestamptz
+
+  empresa Empresa @relation(fields: [empresaId], references: [id])
+
+  @@index([empresaId, fecha])
+  @@map("pago_licencia")
+}
