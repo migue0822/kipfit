@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Restaura un respaldo en una base temporal, cuenta empresas y documentos, y la borra.
+# Restaura un respaldo en una base temporal, cuenta empresas, sucursales y usuarios, y la borra.
 # No toca la base en uso. Sin argumento usa el respaldo diario más reciente.
 #   docker compose exec respaldo probar-restauracion.sh [ruta del .dump]
 set -euo pipefail
@@ -16,7 +16,7 @@ createdb "$PRUEBA"
 trap 'dropdb --if-exists --force "$PRUEBA"' EXIT
 pg_restore --no-owner --exit-on-error --dbname="$PRUEBA" "$archivo"
 
-contar() { psql -d "$1" -Atc "SELECT (SELECT count(*) FROM empresa) || ' empresas, ' || (SELECT count(*) FROM documento) || ' documentos, ' || (SELECT count(*) FROM turno_caja) || ' cierres de caja'"; }
+contar() { psql -d "$1" -Atc "SELECT (SELECT count(*) FROM empresa) || ' empresas, ' || (SELECT count(*) FROM sucursal) || ' sucursales, ' || (SELECT count(*) FROM usuario) || ' usuarios'"; }
 echo "Respaldo restaurado: $(contar "$PRUEBA")"
 echo "Base en uso:         $(contar "$PGDATABASE")"
 echo "Restauración correcta."

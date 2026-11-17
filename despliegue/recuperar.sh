@@ -106,12 +106,12 @@ done
 [ "${estado:-}" = "healthy" ] || falla "la API no arrancó. Revise: docker compose logs --tail 100 api"
 
 titulo "Listo en $(($(date +%s) - inicio)) segundos"
-en_respaldo respaldo psql -Atc "SELECT (SELECT count(*) FROM empresa) || ' empresas, ' || (SELECT count(*) FROM documento) || ' documentos, ' || (SELECT count(*) FROM usuario) || ' usuarios'"
+en_respaldo respaldo psql -Atc "SELECT (SELECT count(*) FROM empresa) || ' empresas, ' || (SELECT count(*) FROM sucursal) || ' sucursales, ' || (SELECT count(*) FROM usuario) || ' usuarios'"
 cat <<'TXT'
 Falta:
   1. Si es un servidor nuevo: OrdenKipu debe estar recuperado y arrancado; luego publique Kipfit con ./conectar.sh
      y en duckdns.org ponga la IP de este servidor en su dominio (update ip). En unos minutos sale el candado.
-  2. Entre al sistema y revise las últimas ventas: lo registrado después de la hora del respaldo se perdió y hay
+  2. Entre al sistema y revise los últimos cambios: lo registrado después de la hora del respaldo se perdió y hay
      que volver a digitarlo.
   3. Haga un respaldo nuevo ya: docker compose exec respaldo respaldar.sh
 TXT
