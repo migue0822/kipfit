@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Simulacro sin riesgo: baja de la nube un respaldo (el más reciente o el indicado), lo restaura en una base
-# temporal, cuenta empresas y documentos, y borra todo. No toca la base en uso.
+# temporal, cuenta empresas, sucursales y usuarios, y borra todo. No toca la base en uso.
 #   docker compose exec respaldo probar-nube.sh [kip-AAAAMMDD-HHMM.dump]
 set -euo pipefail
 inicio=$(date +%s)
