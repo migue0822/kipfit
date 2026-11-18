@@ -12,6 +12,10 @@ export const PERMISOS = {
   AFILIADOS_EDITAR: 'afiliados.editar',
   /** Registrar el ingreso de un afiliado, en recepción o en la tablet (Etapa 2). */
   INGRESOS_REGISTRAR: 'ingresos.registrar',
+  /** Abrir y cerrar su propia caja, cobrar membresías y registrar ingresos y egresos de caja (Etapa 3). */
+  CAJA_OPERAR: 'caja.operar',
+  /** Ver y cerrar las cajas de todos los cajeros (Etapa 3). */
+  CAJA_SUPERVISAR: 'caja.supervisar',
   INFORMES_VER: 'informes.ver',
 } as const;
 
@@ -45,6 +49,21 @@ export const CATALOGO_PERMISOS: {
         codigo: PERMISOS.INGRESOS_REGISTRAR,
         nombre: 'Registrar ingresos',
         descripcion: 'Registrar el ingreso de un afiliado al gimnasio.',
+      },
+    ],
+  },
+  {
+    grupo: 'Caja',
+    permisos: [
+      {
+        codigo: PERMISOS.CAJA_OPERAR,
+        nombre: 'Operar la caja',
+        descripcion: 'Abrir y cerrar su caja, cobrar membresías y registrar ingresos y egresos.',
+      },
+      {
+        codigo: PERMISOS.CAJA_SUPERVISAR,
+        nombre: 'Supervisar las cajas',
+        descripcion: 'Ver y cerrar las cajas de todos los cajeros.',
       },
     ],
   },
@@ -84,7 +103,12 @@ export const CATALOGO_PERMISOS: {
 export const ROLES_SUGERIDOS: { nombre: string; permisos: Permiso[] }[] = [
   {
     nombre: 'Recepción',
-    permisos: [PERMISOS.AFILIADOS_VER, PERMISOS.AFILIADOS_EDITAR, PERMISOS.INGRESOS_REGISTRAR],
+    permisos: [
+      PERMISOS.AFILIADOS_VER,
+      PERMISOS.AFILIADOS_EDITAR,
+      PERMISOS.INGRESOS_REGISTRAR,
+      PERMISOS.CAJA_OPERAR,
+    ],
   },
   {
     nombre: 'Supervisor',
@@ -92,6 +116,8 @@ export const ROLES_SUGERIDOS: { nombre: string; permisos: Permiso[] }[] = [
       PERMISOS.AFILIADOS_VER,
       PERMISOS.AFILIADOS_EDITAR,
       PERMISOS.INGRESOS_REGISTRAR,
+      PERMISOS.CAJA_OPERAR,
+      PERMISOS.CAJA_SUPERVISAR,
       PERMISOS.INFORMES_VER,
     ],
   },

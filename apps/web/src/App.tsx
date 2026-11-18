@@ -9,6 +9,8 @@ import { Sucursales } from './administracion/Sucursales';
 import { Usuarios } from './administracion/Usuarios';
 import { Afiliados } from './afiliados/Afiliados';
 import { Planes } from './afiliados/Planes';
+import { Caja } from './caja/Caja';
+import { Recibo } from './caja/Recibo';
 import { Recepcion } from './ingresos/Recepcion';
 import { Tablet } from './ingresos/Tablet';
 import { Bienvenida } from './paginas/Bienvenida';
@@ -24,7 +26,7 @@ import { Aviso } from './ui';
 export function App() {
   const perfil = usePerfil();
   const [vista, setVista] = useState<'ingresar' | 'registro'>('ingresar');
-  const [ruta, ir] = useRuta();
+  const [ruta, ir, params] = useRuta();
   // El registro de empresas puede estar cerrado o pedir un código.
   const estadoRegistro = useQuery({
     queryKey: ['auth', 'registro'],
@@ -71,6 +73,10 @@ export function App() {
   if (ruta === 'ingreso' && permiso && tienePermiso(p.permisos, permiso)) {
     return <Tablet perfil={p} salir={() => ir('ingresos')} />;
   }
+  // El recibo se abre solo, para imprimirlo.
+  if (ruta === 'recibo' && params.id && tienePermiso(p.permisos, PERMISOS.AFILIADOS_VER)) {
+    return <Recibo id={params.id} />;
+  }
   return (
     <Marco perfil={p} ruta={ruta} ir={ir}>
       {/* Si alguien escribe la dirección de una pantalla sin permiso. El servidor igual lo impide. */}
@@ -86,6 +92,7 @@ export function App() {
             <Planes puedeEditar={tienePermiso(p.permisos, PERMISOS.AFILIADOS_EDITAR)} />
           )}
           {ruta === 'ingresos' && <Recepcion />}
+          {ruta === 'caja' && <Caja perfil={p} />}
           {ruta === 'usuarios' && <Usuarios perfil={p} />}
           {ruta === 'roles' && <Roles />}
           {ruta === 'sucursales' && <Sucursales />}

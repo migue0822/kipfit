@@ -36,14 +36,15 @@ pnpm --filter @kip/api e2e         # después de build; requiere psql
 4. **Nada se borra:** documentos se anulan; maestros y presentaciones se inactivan. Cambios a `auditoria`.
 5. **Consecutivos** con `tomarConsecutivo` (bloqueo `FOR UPDATE` en `numeracion`) dentro de la
    transacción del documento. Prefijos (`PREFIJOS` en `comun/numeracion.ts`) + código de sucursal:
-   hoy solo `RC` recibo; los demás se agregan con cada módulo.
+   `RC` recibo, `CJ` turno de caja y `MC` movimiento de caja; los demás se agregan con cada módulo (la migración crea los
+   de las sucursales existentes y `crearNumeraciones` los de las nuevas).
 6. **Un documento = una transacción.**
 7. **Fechas** en UTC (`timestamptz`), se muestran en America/Bogota.
 8. **Permisos en el backend** (`@RequierePermiso`); el catálogo está en `packages/shared/src/permisos.ts`
    (todo permiso nuevo también en `CATALOGO_PERMISOS`, lo verifica una prueba).
 9. **Autenticación propia:** sesiones en servidor (cookie httpOnly `kip_sesion`), Argon2.
 
-## Estado y diseño (Etapas 0, 1 y 2 hechas)
+## Estado y diseño (Etapas 0 a 3 hechas)
 
 - Núcleo: autenticación, empresas, sucursales, usuarios, roles, auditoría, RLS (`kip_app`) y licencias/planes/pagos.
   Permisos en `packages/shared/src/permisos.ts` (empresa, sucursales, usuarios, afiliados, ingresos, informes) y roles
@@ -67,7 +68,7 @@ vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacio
   POR_VENCER (≤ 7 días), CONGELADA, VENCIDA o AGOTADA. Vender/renovar bloquea la fila del afiliado `FOR UPDATE`, empieza hoy
   o el día siguiente al fin de la vigente, no en el pasado ni cruzada (409). Descongelar corre la fecha fin esos días y la de
   las que siguen. El afiliado inactivo o el plan inactivo no venden (409).
-- Aún sin cobro: la venta de membresía guarda el precio pero no genera recibo ni movimiento de caja (Etapa 4). Sin foto,
+- El cobro va en la venta (ver "Caja y cobros"); sin `pagos` la membresía queda sin cobro (cortesía o dato de antes). Sin foto,
   huella ni importación del desktop todavía. Suite e2e `afiliados`.
 
 ## Ingreso (`apps/api/src/ingresos`, `@kip/shared` `esquemas/ingresos.ts`, web `ingresos/`, menú Ingreso)
@@ -89,6 +90,31 @@ vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacio
 - Web: `#/ingreso` = **pantalla de la tablet** (sin menú, teclado numérico grande, resultado de 6 s: verde bienvenido,
   ámbar alerta, rojo error; reintenta con el mismo `id` si falla la red) y `#/ingresos` = **recepción en vivo** (lista
   del día, pitido y resalte en cada ingreso, Aceptar/Anular, registro manual). Suite e2e `ingresos`.
+
+## Caja y cobros (`apps/api/src/caja`, `@kip/shared` `esquemas/caja.ts`, web `caja/`, menú Caja)
+
+- `turno_caja` (RLS, `CJ` + sucursal): lo abre un cajero con una base; **uno abierto por cajero y sucursal** (índice parcial
+  `turno_caja_abierto_unico`, solo en el SQL y en `PROPIOS_DEL_SQL`). Al cerrar guarda `contado`, `esperado`, `diferencia`
+  y la foto `resumen`: el cuadre de un turno cerrado no cambia. Si no cuadra exige observaciones.
+- `recibo` (`RC`, uno por `suscripcion`) + `recibo_pago` (una fila por medio: EFECTIVO, TRANSFERENCIA, NEQUI, DAVIPLATA,
+  TARJETA; 1 a 5 distintos, suman exactamente el precio). Se crea **en la misma transacción de la venta**
+  (`CajaService.cobrarMembresia`, llamado desde `venderEnTx` cuando vienen `pagos`): exige `caja.operar` y la caja abierta
+  del usuario (409 si no). Anular la membresía anula su recibo (`anularReciboDeMembresia`) y solo si la caja del cobro sigue
+  abierta; el efectivo no puede quedar en negativo.
+- `movimiento_caja` (`MC`): ingreso o egreso de efectivo con concepto; un egreso no puede superar el efectivo que hay;
+  se anula (no se borra) y solo con el turno abierto.
+- **Cuadre** (`calcularCuadre`, en centavos exactos con `aCentavos/deCentavos`): efectivo esperado = base + cobros en
+  efectivo + ingresos − egresos (solo vigentes); los otros medios se informan aparte, no están en la caja.
+- **Orden de bloqueo:** afiliado → turno (`FOR SHARE` en cobros y movimientos; el cierre lo toma `FOR UPDATE` y espera a los
+  cobros en curso) → numeración. Las salidas de efectivo de un turno se serializan con `pg_advisory_xact_lock('efectivo:…')`
+  (con `$executeRaw`: Prisma no lee `void`).
+- Endpoints: `GET /caja/actual`, `POST /caja/abrir`, `POST /caja/turnos/:id/cerrar` (`@PermitidoEnSoloLectura`: se puede
+  cerrar con la licencia vencida), `GET /caja/turnos?desde&hasta`, `GET /caja/turnos/:id`, `POST /caja/movimientos`,
+  `POST /caja/movimientos/:id/anular`, `GET /recibos/:id` (`afiliados.ver`, para imprimir). Permisos: `caja.operar` (su
+  caja; Recepción y Supervisor) y `caja.supervisar` (ver y cerrar la de todos; Supervisor).
+- Web: `#/caja` (abrir, cuadre en vivo, ingreso/egreso, cerrar con vista previa de la diferencia, cajas del día),
+  panel de cobro en la ficha del afiliado (pago combinado, "Sin cobro" para cortesías, aviso si no hay caja abierta) y
+  `#/recibo?id=` (recibo imprimible en otra pestaña). Suite e2e `caja`.
 
 ## Registro de empresas, licencias y demostraciones (`apps/api/src/plataforma`, `@kip/shared` `plataforma.ts`)
 
@@ -141,5 +167,5 @@ vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacio
 1. ✅ Etapa 0: esqueleto Kipfit (núcleo de AviKipu), licencias desde la consola de OrdenKipu.
 2. ✅ Afiliados y planes: fichas, membresías (vender, renovar, congelar, anular) y vencimientos. Falta: foto, importación desde la app de escritorio.
 3. ✅ Ingreso: ventana para tablet con SSE hacia recepción. Falta (opcional): foto/huella en la entrada.
-4. Cobros, caja e informes; contrato de licencia adaptable a cada app KIPU.
+4. ✅ Cobros y caja (recibos, pago combinado, turnos, cuadre). Siguen: informes y contrato de licencia adaptable a cada app KIPU.
 5. Respaldos y despliegue en el servidor de Oracle junto a OrdenKipu y AviKipu; modo sin conexión (explorar).

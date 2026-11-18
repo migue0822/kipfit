@@ -29,6 +29,12 @@ const ACCESOS: Acceso[] = [
     permiso: PERMISOS.INGRESOS_REGISTRAR,
   },
   {
+    ruta: 'caja',
+    titulo: 'Mi caja',
+    texto: 'Abrir la caja, cobrar membresías, ingresos y egresos, y el cierre del día.',
+    permiso: PERMISOS.CAJA_OPERAR,
+  },
+  {
     ruta: 'usuarios',
     titulo: 'Usuarios',
     texto: 'Recepción, entrenadores y administradores, con su rol y sucursal.',

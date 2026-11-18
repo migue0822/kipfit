@@ -31,18 +31,22 @@ model Empresa {
   licenciaEstado  String    @default("ACTIVA") @map("licencia_estado")
   licenciaNotas   String?   @map("licencia_notas")
 
-  plan           Plan?          @relation(fields: [planId], references: [id])
-  pagosLicencia  PagoLicencia[]
-  sucursales     Sucursal[]
-  membresias     Membresia[]
-  roles          Rol[]
-  planesGimnasio PlanGimnasio[]
-  afiliados      Afiliado[]
-  suscripciones  Suscripcion[]
-  ingresos       Ingreso[]
-  numeraciones   Numeracion[]
-  sesiones       Sesion[]
-  auditoria      Auditoria[]
+  plan            Plan?            @relation(fields: [planId], references: [id])
+  pagosLicencia   PagoLicencia[]
+  sucursales      Sucursal[]
+  membresias      Membresia[]
+  roles           Rol[]
+  planesGimnasio  PlanGimnasio[]
+  afiliados       Afiliado[]
+  suscripciones   Suscripcion[]
+  ingresos        Ingreso[]
+  turnosCaja      TurnoCaja[]
+  recibos         Recibo[]
+  recibosPagos    ReciboPago[]
+  movimientosCaja MovimientoCaja[]
+  numeraciones    Numeracion[]
+  sesiones        Sesion[]
+  auditoria       Auditoria[]
 
   @@map("empresa")
 }
@@ -57,13 +61,16 @@ model Sucursal {
   activa    Boolean  @default(true)
   creadoEn  DateTime @default(now()) @map("creado_en") @db.Timestamptz
 
-  empresa       Empresa             @relation(fields: [empresaId], references: [id])
-  numeraciones  Numeracion[]
-  accesos       MembresiaSucursal[]
-  afiliados     Afiliado[]
-  suscripciones Suscripcion[]
-  ingresos      Ingreso[]
-  sesiones      Sesion[]
+  empresa         Empresa             @relation(fields: [empresaId], references: [id])
+  numeraciones    Numeracion[]
+  accesos         MembresiaSucursal[]
+  afiliados       Afiliado[]
+  suscripciones   Suscripcion[]
+  ingresos        Ingreso[]
+  turnosCaja      TurnoCaja[]
+  recibos         Recibo[]
+  movimientosCaja MovimientoCaja[]
+  sesiones        Sesion[]
 
   @@unique([empresaId, codigo])
   @@index([empresaId])
@@ -268,6 +275,7 @@ model Afiliado {
   referidos     Afiliado[]    @relation("Referidos")
   suscripciones Suscripcion[]
   ingresos      Ingreso[]
+  recibos       Recibo[]
 
   @@unique([empresaId, documento])
   @@index([empresaId, nombre])
@@ -302,6 +310,7 @@ model Suscripcion {
   afiliado Afiliado     @relation(fields: [afiliadoId], references: [id])
   plan     PlanGimnasio @relation(fields: [planId], references: [id])
   ingresos Ingreso[]
+  recibo   Recibo?
 
   @@index([empresaId, afiliadoId, fechaFin])
   @@index([empresaId, estado, fechaFin])
@@ -342,4 +351,113 @@ model Ingreso {
   @@index([empresaId, sucursalId, fecha, fechaHora])
   @@index([empresaId, afiliadoId, fechaHora])
   @@map("ingreso")
+}
+
+// ───────────── Caja y cobros (Etapa 3) ─────────────
+
+/// Turno de caja de un cajero en una sucursal (consecutivo CJ + sucursal). Uno abierto por cajero y sucursal
+/// (índice parcial `turno_caja_abierto_unico`, solo en el SQL).
+model TurnoCaja {
+  id            String    @id @default(uuid()) @db.Uuid
+  empresaId     String    @map("empresa_id") @db.Uuid
+  sucursalId    String    @map("sucursal_id") @db.Uuid
+  cajeroId      String    @map("cajero_id") @db.Uuid
+  prefijo       String
+  numero        BigInt
+  abiertoEn     DateTime  @default(now()) @map("abierto_en") @db.Timestamptz
+  base          Decimal   @db.Decimal(18, 2)
+  estado        String    @default("ABIERTO") // ABIERTO | CERRADO
+  cerradoEn     DateTime? @map("cerrado_en") @db.Timestamptz
+  cerradoPorId  String?   @map("cerrado_por_id") @db.Uuid
+  contado       Decimal?  @db.Decimal(18, 2)
+  esperado      Decimal?  @db.Decimal(18, 2)
+  diferencia    Decimal?  @db.Decimal(18, 2)
+  observaciones String?
+  /// Foto del cuadre al cerrar: el de un turno cerrado no cambia.
+  resumen       Json?
+
+  empresa         Empresa          @relation(fields: [empresaId], references: [id])
+  sucursal        Sucursal         @relation(fields: [sucursalId], references: [id])
+  recibos         Recibo[]
+  movimientosCaja MovimientoCaja[]
+
+  @@unique([empresaId, prefijo, numero])
+  @@index([empresaId, sucursalId, abiertoEn])
+  @@map("turno_caja")
+}
+
+/// Cobro de una membresía (consecutivo RC + sucursal). Se crea en la misma transacción de la venta.
+model Recibo {
+  id              String    @id @default(uuid()) @db.Uuid
+  empresaId       String    @map("empresa_id") @db.Uuid
+  sucursalId      String    @map("sucursal_id") @db.Uuid
+  turnoId         String    @map("turno_id") @db.Uuid
+  afiliadoId      String    @map("afiliado_id") @db.Uuid
+  suscripcionId   String    @unique @map("suscripcion_id") @db.Uuid
+  prefijo         String
+  numero          BigInt
+  concepto        String
+  valor           Decimal   @db.Decimal(18, 2)
+  fechaHora       DateTime  @default(now()) @map("fecha_hora") @db.Timestamptz
+  estado          String    @default("VIGENTE") // VIGENTE | ANULADO
+  anuladoEn       DateTime? @map("anulado_en") @db.Timestamptz
+  motivoAnulacion String?   @map("motivo_anulacion")
+  /// Turno donde se anuló (el dinero se devuelve de esa caja).
+  anuladoTurnoId  String?   @map("anulado_turno_id") @db.Uuid
+  creadoPorId     String?   @map("creado_por_id") @db.Uuid
+
+  empresa     Empresa      @relation(fields: [empresaId], references: [id])
+  sucursal    Sucursal     @relation(fields: [sucursalId], references: [id])
+  turno       TurnoCaja    @relation(fields: [turnoId], references: [id])
+  afiliado    Afiliado     @relation(fields: [afiliadoId], references: [id])
+  suscripcion Suscripcion  @relation(fields: [suscripcionId], references: [id])
+  pagos       ReciboPago[]
+
+  @@unique([empresaId, prefijo, numero])
+  @@index([empresaId, sucursalId, fechaHora])
+  @@index([empresaId, afiliadoId])
+  @@index([turnoId])
+  @@map("recibo")
+}
+
+/// Cómo se pagó un recibo: una fila por medio (pago combinado).
+model ReciboPago {
+  id        String  @id @default(uuid()) @db.Uuid
+  empresaId String  @map("empresa_id") @db.Uuid
+  reciboId  String  @map("recibo_id") @db.Uuid
+  medio     String // EFECTIVO | TRANSFERENCIA | NEQUI | DAVIPLATA | TARJETA
+  valor     Decimal @db.Decimal(18, 2)
+
+  empresa Empresa @relation(fields: [empresaId], references: [id])
+  recibo  Recibo  @relation(fields: [reciboId], references: [id])
+
+  @@unique([reciboId, medio])
+  @@index([empresaId])
+  @@map("recibo_pago")
+}
+
+/// Ingreso o egreso de efectivo de la caja que no es una venta (consecutivo MC + sucursal).
+model MovimientoCaja {
+  id              String    @id @default(uuid()) @db.Uuid
+  empresaId       String    @map("empresa_id") @db.Uuid
+  sucursalId      String    @map("sucursal_id") @db.Uuid
+  turnoId         String    @map("turno_id") @db.Uuid
+  tipo            String // INGRESO | EGRESO
+  concepto        String
+  valor           Decimal   @db.Decimal(18, 2)
+  prefijo         String
+  numero          BigInt
+  fechaHora       DateTime  @default(now()) @map("fecha_hora") @db.Timestamptz
+  estado          String    @default("VIGENTE") // VIGENTE | ANULADO
+  anuladoEn       DateTime? @map("anulado_en") @db.Timestamptz
+  motivoAnulacion String?   @map("motivo_anulacion")
+  creadoPorId     String?   @map("creado_por_id") @db.Uuid
+
+  empresa  Empresa   @relation(fields: [empresaId], references: [id])
+  sucursal Sucursal  @relation(fields: [sucursalId], references: [id])
+  turno    TurnoCaja @relation(fields: [turnoId], references: [id])
+
+  @@unique([empresaId, prefijo, numero])
+  @@index([turnoId])
+  @@map("movimiento_caja")
 }

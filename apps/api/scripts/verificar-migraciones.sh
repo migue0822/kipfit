@@ -4,7 +4,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 # Índices que solo existen en el SQL (Prisma propone borrarlos).
-PROPIOS_DEL_SQL='ninguno_por_ahora'
+PROPIOS_DEL_SQL='turno_caja_abierto_unico'
 
 diferencias=$(npx prisma migrate diff --from-config-datasource --to-schema prisma/schema.prisma --script \
   | grep -v '^--' | grep -v '^\s*$' | grep -Ev "DROP INDEX \"(${PROPIOS_DEL_SQL})\";" || true)
