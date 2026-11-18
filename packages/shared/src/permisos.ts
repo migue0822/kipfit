@@ -17,6 +17,18 @@ export const PERMISOS = {
   /** Ver y cerrar las cajas de todos los cajeros (Etapa 3). */
   CAJA_SUPERVISAR: 'caja.supervisar',
   INFORMES_VER: 'informes.ver',
+  /** Ver productos, existencias y ventas de la tienda. */
+  TIENDA_VER: 'tienda.ver',
+  /** Vender en la tienda (cobra en su caja) y hacer devoluciones. */
+  TIENDA_VENDER: 'tienda.vender',
+  /** Crear y editar productos y precios. */
+  TIENDA_PRODUCTOS: 'tienda.productos',
+  /** Entradas de mercancía y ajustes de inventario (conteo, mermas). */
+  TIENDA_INVENTARIO: 'tienda.inventario',
+  /** Anular entradas, ajustes y ventas. */
+  TIENDA_ANULAR: 'tienda.anular',
+  /** Ver costos y utilidad de la tienda. */
+  TIENDA_COSTOS: 'tienda.costos',
 } as const;
 
 export type Permiso = (typeof PERMISOS)[keyof typeof PERMISOS];
@@ -68,6 +80,41 @@ export const CATALOGO_PERMISOS: {
     ],
   },
   {
+    grupo: 'Tienda',
+    permisos: [
+      {
+        codigo: PERMISOS.TIENDA_VER,
+        nombre: 'Ver la tienda',
+        descripcion: 'Consultar productos, existencias y ventas de la tienda.',
+      },
+      {
+        codigo: PERMISOS.TIENDA_VENDER,
+        nombre: 'Vender en la tienda',
+        descripcion: 'Registrar ventas (se cobran en su caja) y devoluciones.',
+      },
+      {
+        codigo: PERMISOS.TIENDA_PRODUCTOS,
+        nombre: 'Productos y precios',
+        descripcion: 'Crear y editar los productos de la tienda y sus precios.',
+      },
+      {
+        codigo: PERMISOS.TIENDA_INVENTARIO,
+        nombre: 'Inventario de la tienda',
+        descripcion: 'Registrar entradas de mercancía y ajustes (conteo, mermas).',
+      },
+      {
+        codigo: PERMISOS.TIENDA_ANULAR,
+        nombre: 'Anular en la tienda',
+        descripcion: 'Anular entradas, ajustes y ventas.',
+      },
+      {
+        codigo: PERMISOS.TIENDA_COSTOS,
+        nombre: 'Ver costos de la tienda',
+        descripcion: 'Ver costos, utilidad y el valor del inventario.',
+      },
+    ],
+  },
+  {
     grupo: 'Informes',
     permisos: [
       {
@@ -108,6 +155,8 @@ export const ROLES_SUGERIDOS: { nombre: string; permisos: Permiso[] }[] = [
       PERMISOS.AFILIADOS_EDITAR,
       PERMISOS.INGRESOS_REGISTRAR,
       PERMISOS.CAJA_OPERAR,
+      PERMISOS.TIENDA_VER,
+      PERMISOS.TIENDA_VENDER,
     ],
   },
   {
@@ -119,6 +168,12 @@ export const ROLES_SUGERIDOS: { nombre: string; permisos: Permiso[] }[] = [
       PERMISOS.CAJA_OPERAR,
       PERMISOS.CAJA_SUPERVISAR,
       PERMISOS.INFORMES_VER,
+      PERMISOS.TIENDA_VER,
+      PERMISOS.TIENDA_VENDER,
+      PERMISOS.TIENDA_PRODUCTOS,
+      PERMISOS.TIENDA_INVENTARIO,
+      PERMISOS.TIENDA_ANULAR,
+      PERMISOS.TIENDA_COSTOS,
     ],
   },
 ];

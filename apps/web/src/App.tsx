@@ -11,6 +11,8 @@ import { Afiliados } from './afiliados/Afiliados';
 import { Planes } from './afiliados/Planes';
 import { Caja } from './caja/Caja';
 import { Recibo } from './caja/Recibo';
+import { Inventario } from './tienda/Inventario';
+import { Productos } from './tienda/Productos';
 import { Informes } from './informes/Informes';
 import { Recepcion } from './ingresos/Recepcion';
 import { Tablet } from './ingresos/Tablet';
@@ -94,6 +96,8 @@ export function App() {
           )}
           {ruta === 'ingresos' && <Recepcion />}
           {ruta === 'caja' && <Caja perfil={p} />}
+          {ruta === 'productos' && <Productos perfil={p} />}
+          {ruta === 'inventario' && <Inventario perfil={p} />}
           {ruta === 'informes' && <Informes perfil={p} />}
           {ruta === 'usuarios' && <Usuarios perfil={p} />}
           {ruta === 'roles' && <Roles />}

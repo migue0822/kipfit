@@ -150,6 +150,26 @@ vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacio
 - La web (una pantalla, cuatro pestañas): períodos rápidos, CSV para Excel (`;`, BOM), imprimir y, en Vencimientos, botón de
   WhatsApp (`enlaceWhatsApp` + `mensajeVencimiento`; solo celulares colombianos). Suite e2e `informes`.
 
+## Tienda: productos e inventario (`apps/api/src/tienda`, `@kip/shared` `esquemas/tienda.ts`, web `tienda/`, menú Tienda)
+
+- Productos (`/tienda/productos`, patrón de maestros sin DELETE; `tienda.ver` lee, `tienda.productos` escribe): maestro por
+  **empresa** (`codigo` opcional único en mayúsculas y sin espacios, `precio_venta`, `texto_busqueda`); la **existencia es por
+  sucursal** (`existencia`: cantidad entera, `valor` en pesos = fuente de verdad, `costo_promedio` derivado; `CHECK` no negativos).
+  Cambiar el precio deja `cambiar_precio` en auditoría y no toca lo vendido.
+- Todo movimiento nace de un **documento** (`documento` + `documento_linea`, prefijos `EN` entrada, `AJ` ajuste, `VT` venta y
+  `DV` devolución + código de sucursal) y pasa por `aplicarPasos` (`tienda/movimientos.ts`, igual que AviKipu): bloquea las
+  existencias en orden de id, valida que ninguna quede negativa, actualiza y deja el kardex (`movimiento_inventario`).
+  **Costo promedio ponderado por valor total** (`tienda/costo.ts`). Orden de bloqueo: numeración → existencias.
+- `POST /tienda/inventario/entradas` (`tienda.inventario`): unidades × costo digitado = valor exacto de la línea.
+  `POST /tienda/inventario/ajustes`: por producto `sistema` y `contado`; si la existencia cambió desde que se cargó → 409 (la
+  pantalla recarga sin perder lo digitado); motivos CONTEO, MERMA, DANADO, VENCIDO, CONSUMO, OTRO (todos menos CONTEO exigen
+  observaciones); lo que falta sale y lo que sobra entra al costo promedio. `POST …/documentos/:id/anular` (`tienda.anular`):
+  reversa con el valor exacto y falla si la existencia quedaría negativa; ventas y devoluciones se anulan desde Ventas.
+- **Costos solo con `tienda.costos`**: costo promedio, valor, costos de líneas y kardex llegan `null` sin él y la web quita
+  las columnas. Roles sugeridos: Recepción = ver + vender; Supervisor = todos los `tienda.*`.
+  Los roles que ya existen en una empresa no reciben permisos nuevos: agréguelos en Administración → Roles.
+- Suite e2e `tienda-inventario`. Sigue: venta (POS) cobrada por la caja, devoluciones e informes de la tienda.
+
 ## Registro de empresas, licencias y demostraciones (`apps/api/src/plataforma`, `@kip/shared` `plataforma.ts`)
 
 - Página de ingreso → "Registrarla". `REGISTRO_PUBLICO=no` lo cierra; con `REGISTRO_CODIGO` queda abierto
