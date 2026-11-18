@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { AfiliadosModule } from './afiliados/afiliados.module';
 import { AdministracionModule } from './administracion/administracion.module';
 import { AuthModule } from './auth/auth.module';
 import { EmpresaModule } from './empresa/empresa.module';
@@ -13,6 +14,7 @@ import { SaludModule } from './salud/salud.module';
     SaludModule,
     PlataformaModule,
     AdministracionModule,
+    AfiliadosModule,
     EmpresaModule,
   ],
 })

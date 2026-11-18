@@ -5,10 +5,16 @@ type Acceso = { ruta?: Ruta; titulo: string; texto: string; permiso: string; pro
 
 const ACCESOS: Acceso[] = [
   {
+    ruta: 'afiliados',
     titulo: 'Afiliados',
     texto: 'Fichas, planes y vencimientos de cada afiliado.',
     permiso: PERMISOS.AFILIADOS_VER,
-    proximo: true,
+  },
+  {
+    ruta: 'planes',
+    titulo: 'Planes',
+    texto: 'Lo que se vende: mensuales y tiqueteras.',
+    permiso: PERMISOS.AFILIADOS_VER,
   },
   {
     titulo: 'Ingreso',

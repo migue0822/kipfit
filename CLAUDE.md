@@ -43,17 +43,34 @@ pnpm --filter @kip/api e2e         # después de build; requiere psql
    (todo permiso nuevo también en `CATALOGO_PERMISOS`, lo verifica una prueba).
 9. **Autenticación propia:** sesiones en servidor (cookie httpOnly `kip_sesion`), Argon2.
 
-## Estado y diseño (Etapa 0 hecha)
+## Estado y diseño (Etapas 0 y 1 hechas)
 
 - Núcleo: autenticación, empresas, sucursales, usuarios, roles, auditoría, RLS (`kip_app`) y licencias/planes/pagos.
   Permisos en `packages/shared/src/permisos.ts` (empresa, sucursales, usuarios, afiliados, ingresos, informes) y roles
-  sugeridos Recepción y Supervisor. Las pantallas de afiliados e ingreso aparecen como "Próximamente".
+  sugeridos Recepción y Supervisor. La pantalla de ingreso aparece como "Próximamente".
 - Migraciones: armadas a mano desde las de AviKipu (no verificadas con `prisma migrate diff`); verifíquelas con
   `scripts/verificar-migraciones.sh` en CI antes de desplegar. `ventasMes` de la consola vale 0 hasta contar los
   ingresos del mes (Etapa 2).
 - Reglas de diseño para el modo sin conexión (futuro): ids de cliente (UUID), operaciones idempotentes, marcas de
   tiempo del cliente y consecutivos asignados por el servidor al sincronizar.
 - Tiempo real de la ventana de ingreso: SSE (aún no existe en OrdenKipu).
+
+## Afiliados, planes y membresías (`apps/api/src/afiliados`, `@kip/shared` `esquemas/afiliados.ts`, web `afiliados/`)
+
+- `plan_gimnasio` (`/planes`): `MENSUAL` (por días) o `TIQUETERA` (sesiones dentro de un plazo; `CHECK` sesiones solo en
+  tiquetera). Lectura con `afiliados.ver`, escritura con `afiliados.editar`. Editar un plan no cambia lo ya vendido.
+- `afiliado` (`/afiliados`, patrón de maestros: `buscar`, `estado`, `pagina`; además `membresia=todas|vigentes|por_vencer|
+  vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacios, mayúsculas), `texto_busqueda`,
+  sede de inscripción (`sucursal_id`; la membresía sirve en todas las sucursales). Nada se borra: se inactiva.
+- `suscripcion` (la "membresía" del afiliado; el nombre evita chocar con `membresia` = usuario en empresa): foto del plan
+  y del precio al vender; `fecha_inicio` y `fecha_fin` (el día de inicio cuenta: 30 días desde el 1 terminan el 30);
+  tiquetera con `sesiones_total/usadas`; `congelada_desde` y `dias_congelados`; `estado` VIGENTE | ANULADA (anular no borra).
+- Reglas (`@kip/shared`: `estadoMembresia`, `inicioRenovacion`, `finMembresia`): estado = SIN_MEMBRESIA, VIGENTE,
+  POR_VENCER (≤ 7 días), CONGELADA, VENCIDA o AGOTADA. Vender/renovar bloquea la fila del afiliado `FOR UPDATE`, empieza hoy
+  o el día siguiente al fin de la vigente, no en el pasado ni cruzada (409). Descongelar corre la fecha fin esos días y la de
+  las que siguen. El afiliado inactivo o el plan inactivo no venden (409).
+- Aún sin cobro: la venta de membresía guarda el precio pero no genera recibo ni movimiento de caja (Etapa 4). Sin foto,
+  huella ni importación del desktop todavía. Suite e2e `afiliados`.
 
 ## Registro de empresas, licencias y demostraciones (`apps/api/src/plataforma`, `@kip/shared` `plataforma.ts`)
 
@@ -104,7 +121,7 @@ pnpm --filter @kip/api e2e         # después de build; requiere psql
 ## Plan
 
 1. ✅ Etapa 0: esqueleto Kipfit (núcleo de AviKipu), licencias desde la consola de OrdenKipu.
-2. Afiliados y planes (fichas, vencimientos, importación del Excel/SQLite de escritorio cuando se necesite).
+2. ✅ Afiliados y planes: fichas, membresías (vender, renovar, congelar, anular) y vencimientos. Falta: foto, importación desde la app de escritorio.
 3. Ingreso: ventana para tablet con SSE hacia recepción.
 4. Cobros, caja e informes; contrato de licencia adaptable a cada app KIPU.
 5. Respaldos y despliegue en el servidor de Oracle junto a OrdenKipu y AviKipu; modo sin conexión (explorar).

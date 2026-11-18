@@ -20,3 +20,4 @@ export * from './esquemas/empresa.js';
 export * from './esquemas/auth.js';
 export * from './esquemas/administracion.js';
 export * from './plataforma.js';
+export * from './esquemas/afiliados.js';

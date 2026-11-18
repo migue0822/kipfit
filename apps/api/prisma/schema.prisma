@@ -31,11 +31,14 @@ model Empresa {
   licenciaEstado  String    @default("ACTIVA") @map("licencia_estado")
   licenciaNotas   String?   @map("licencia_notas")
 
-  plan           Plan?                  @relation(fields: [planId], references: [id])
+  plan           Plan?          @relation(fields: [planId], references: [id])
   pagosLicencia  PagoLicencia[]
   sucursales     Sucursal[]
   membresias     Membresia[]
   roles          Rol[]
+  planesGimnasio PlanGimnasio[]
+  afiliados      Afiliado[]
+  suscripciones  Suscripcion[]
   numeraciones   Numeracion[]
   sesiones       Sesion[]
   auditoria      Auditoria[]
@@ -53,10 +56,12 @@ model Sucursal {
   activa    Boolean  @default(true)
   creadoEn  DateTime @default(now()) @map("creado_en") @db.Timestamptz
 
-  empresa      Empresa                @relation(fields: [empresaId], references: [id])
-  numeraciones Numeracion[]
-  accesos      MembresiaSucursal[]
-  sesiones     Sesion[]
+  empresa       Empresa             @relation(fields: [empresaId], references: [id])
+  numeraciones  Numeracion[]
+  accesos       MembresiaSucursal[]
+  afiliados     Afiliado[]
+  suscripciones Suscripcion[]
+  sesiones      Sesion[]
 
   @@unique([empresaId, codigo])
   @@index([empresaId])
@@ -72,8 +77,8 @@ model Usuario {
   creadoEn      DateTime @default(now()) @map("creado_en") @db.Timestamptz
   actualizadoEn DateTime @updatedAt @map("actualizado_en") @db.Timestamptz
 
-  membresias     Membresia[]
-  sesiones       Sesion[]
+  membresias Membresia[]
+  sesiones   Sesion[]
 
   @@map("usuario")
 }
@@ -216,4 +221,85 @@ model PagoLicencia {
 
   @@index([empresaId, fecha])
   @@map("pago_licencia")
+}
+
+// ───────────── Afiliados y planes (Etapa 1) ─────────────
+
+/// Plan que se vende al afiliado: mensual (por días) o tiquetera (por sesiones dentro de un plazo).
+model PlanGimnasio {
+  id        String   @id @default(uuid()) @db.Uuid
+  empresaId String   @map("empresa_id") @db.Uuid
+  nombre    String
+  tipo      String // MENSUAL | TIQUETERA
+  precio    Decimal  @db.Decimal(18, 2)
+  dias      Int // duración en días (la tiquetera: plazo para usar las sesiones)
+  sesiones  Int? // solo tiquetera
+  activo    Boolean  @default(true)
+  creadoEn  DateTime @default(now()) @map("creado_en") @db.Timestamptz
+
+  empresa       Empresa       @relation(fields: [empresaId], references: [id])
+  suscripciones Suscripcion[]
+
+  @@unique([empresaId, nombre])
+  @@map("plan_gimnasio")
+}
+
+model Afiliado {
+  id              String    @id @default(uuid()) @db.Uuid
+  empresaId       String    @map("empresa_id") @db.Uuid
+  /// Sede donde se inscribió (la membresía sirve en todas las sucursales de la empresa).
+  sucursalId      String    @map("sucursal_id") @db.Uuid
+  documento       String
+  nombre          String
+  telefono        String?
+  fechaNacimiento DateTime? @map("fecha_nacimiento") @db.Date
+  referidoPorId   String?   @map("referido_por_id") @db.Uuid
+  notas           String?
+  activo          Boolean   @default(true)
+  textoBusqueda   String    @map("texto_busqueda")
+  creadoEn        DateTime  @default(now()) @map("creado_en") @db.Timestamptz
+  actualizadoEn   DateTime  @updatedAt @map("actualizado_en") @db.Timestamptz
+
+  empresa       Empresa       @relation(fields: [empresaId], references: [id])
+  sucursal      Sucursal      @relation(fields: [sucursalId], references: [id])
+  referidoPor   Afiliado?     @relation("Referidos", fields: [referidoPorId], references: [id])
+  referidos     Afiliado[]    @relation("Referidos")
+  suscripciones Suscripcion[]
+
+  @@unique([empresaId, documento])
+  @@index([empresaId, nombre])
+  @@map("afiliado")
+}
+
+/// Una membresía vendida a un afiliado: guarda la foto del plan y del precio al momento de la venta.
+model Suscripcion {
+  id              String    @id @default(uuid()) @db.Uuid
+  empresaId       String    @map("empresa_id") @db.Uuid
+  sucursalId      String    @map("sucursal_id") @db.Uuid
+  afiliadoId      String    @map("afiliado_id") @db.Uuid
+  planId          String    @map("plan_id") @db.Uuid
+  planNombre      String    @map("plan_nombre")
+  tipo            String
+  precio          Decimal   @db.Decimal(18, 2)
+  fechaInicio     DateTime  @map("fecha_inicio") @db.Date
+  fechaFin        DateTime  @map("fecha_fin") @db.Date
+  sesionesTotal   Int?      @map("sesiones_total")
+  sesionesUsadas  Int       @default(0) @map("sesiones_usadas")
+  /// Día desde el que está congelada (null = corriendo). Al descongelar, la fecha fin se corre esos días.
+  congeladaDesde  DateTime? @map("congelada_desde") @db.Date
+  diasCongelados  Int       @default(0) @map("dias_congelados")
+  estado          String    @default("VIGENTE") // VIGENTE | ANULADA
+  motivoAnulacion String?   @map("motivo_anulacion")
+  anuladaEn       DateTime? @map("anulada_en") @db.Timestamptz
+  creadoPorId     String?   @map("creado_por_id") @db.Uuid
+  creadoEn        DateTime  @default(now()) @map("creado_en") @db.Timestamptz
+
+  empresa  Empresa      @relation(fields: [empresaId], references: [id])
+  sucursal Sucursal     @relation(fields: [sucursalId], references: [id])
+  afiliado Afiliado     @relation(fields: [afiliadoId], references: [id])
+  plan     PlanGimnasio @relation(fields: [planId], references: [id])
+
+  @@index([empresaId, afiliadoId, fechaFin])
+  @@index([empresaId, estado, fechaFin])
+  @@map("suscripcion")
 }
