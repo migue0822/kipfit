@@ -30,6 +30,7 @@ import { formatoPesos } from '../formato';
 import { Aviso, Boton, Campo, Selector, erroresDeApi, validar, type Errores } from '../ui';
 import { InsigniaEstado, textoSesiones, textoVencimiento } from './comun';
 import { Ficha } from './Ficha';
+import { ImportarAfiliados } from './Importar';
 
 const FILTROS: { valor: FiltroMembresia; texto: string }[] = [
   { valor: 'todas', texto: 'Todos' },
@@ -46,6 +47,7 @@ export function Afiliados({ perfil }: { perfil: Perfil }) {
   const [inactivos, setInactivos] = useState(false);
   const [pagina, setPagina] = useState(1);
   const [abierto, setAbierto] = useState<string | 'nuevo' | null>(null);
+  const [importando, setImportando] = useState(false);
   const q = useRetardado(buscar);
   const lista = useListado<Paginado<AfiliadoResumen>>('afiliados', {
     buscar: q,
@@ -66,7 +68,16 @@ export function Afiliados({ perfil }: { perfil: Perfil }) {
       <EncabezadoPagina
         titulo="Afiliados"
         descripcion="Busque por nombre, documento o teléfono. La membresía sirve en todas las sucursales."
-        accion={puedeEditar && <Boton onClick={() => setAbierto('nuevo')}>Nuevo afiliado</Boton>}
+        accion={
+          puedeEditar && (
+            <div className="flex flex-wrap gap-2">
+              <Boton variante="secundario" onClick={() => setImportando(true)}>
+                Importar desde Excel
+              </Boton>
+              <Boton onClick={() => setAbierto('nuevo')}>Nuevo afiliado</Boton>
+            </div>
+          )
+        }
       />
       <div className="mb-3 flex flex-wrap items-center gap-3">
         <CajaBusqueda
@@ -145,6 +156,7 @@ export function Afiliados({ perfil }: { perfil: Perfil }) {
           <Ficha key={abierto} id={abierto} puedeEditar={puedeEditar} />
         )}
       </Panel>
+      <ImportarAfiliados abierto={importando} onCerrar={() => setImportando(false)} />
     </>
   );
 }

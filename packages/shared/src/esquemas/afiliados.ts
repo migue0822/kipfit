@@ -215,6 +215,53 @@ export type AfiliadoDetalle = AfiliadoResumen & {
   suscripciones: SuscripcionVista[];
 };
 
+// ───────────── Importación desde Excel ─────────────
+
+export const MAX_FILAS_IMPORTAR_AFILIADOS = 2000;
+
+/**
+ * Una fila de la plantilla. La membresía se carga como estaba (plan + día en que vence), sin cobro ni caja:
+ * sirve para pasar los afiliados de otro programa, incluso los que ya vencieron.
+ */
+export const afiliadoImportarFilaSchema = afiliadoSchema
+  .omit({ referidoPorId: true })
+  .safeExtend({
+    planId: opcional(z.uuid()),
+    venceEl: opcional(fecha),
+    /** Solo tiquetera: sesiones que le quedan. */
+    sesionesRestantes: opcional(
+      z.coerce
+        .number({ error: 'Las sesiones restantes deben ser un número' })
+        .int('Las sesiones restantes deben ser un número entero')
+        .min(0)
+        .max(1000),
+    ),
+  })
+  .superRefine((f, ctx) => {
+    if (f.planId && !f.venceEl)
+      ctx.addIssue({ code: 'custom', path: ['venceEl'], message: 'Indique hasta cuándo vence' });
+    if (!f.planId && f.venceEl)
+      ctx.addIssue({ code: 'custom', path: ['planId'], message: 'Indique el plan' });
+    if (!f.planId && f.sesionesRestantes !== undefined)
+      ctx.addIssue({ code: 'custom', path: ['planId'], message: 'Indique el plan' });
+  });
+export type AfiliadoImportarFila = z.output<typeof afiliadoImportarFilaSchema>;
+
+export const importarAfiliadosSchema = z.object({
+  filas: z
+    .array(afiliadoImportarFilaSchema)
+    .min(1, 'No hay filas para importar')
+    .max(MAX_FILAS_IMPORTAR_AFILIADOS, `Máximo ${MAX_FILAS_IMPORTAR_AFILIADOS} filas por archivo`),
+});
+export type ImportarAfiliadosDatos = z.output<typeof importarAfiliadosSchema>;
+
+export type ResultadoImportarAfiliados = {
+  creados: number;
+  conMembresia: number;
+  /** Documentos que ya existían: se dejaron como estaban. */
+  omitidos: string[];
+};
+
 // ───────────── Foto ─────────────
 
 /** Tamaño máximo de la foto ya reducida por el navegador (el servidor valida los bytes, no solo el tipo). */

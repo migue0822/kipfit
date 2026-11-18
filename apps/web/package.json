@@ -13,6 +13,7 @@
   "dependencies": {
     "@kip/shared": "workspace:*",
     "@tanstack/react-query": "^5.90.0",
+    "exceljs": "^4.4.0",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
     "zod": "^4.6.6"

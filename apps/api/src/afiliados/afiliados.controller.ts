@@ -19,6 +19,7 @@ import {
   anularMembresiaSchema,
   cambiarEstadoSchema,
   fotoSchema,
+  importarAfiliadosSchema,
   tienePermiso,
   membresiaNuevaSchema,
   planGimnasioSchema,
@@ -28,6 +29,7 @@ import {
   type AnularMembresiaDatos,
   type CambiarEstado,
   type FotoDatos,
+  type ImportarAfiliadosDatos,
   type MembresiaNuevaDatos,
   type PlanGimnasioDatos,
 } from '@kip/shared';
@@ -93,6 +95,16 @@ export class AfiliadosController {
     @Query(new ZodPipe(afiliadosQuerySchema)) q: z.output<typeof afiliadosQuerySchema>,
   ) {
     return this.afiliados.listar(ctx, q);
+  }
+
+  /** POST /afiliados/importar { filas }: todo o nada; los documentos que ya existen se omiten. */
+  @Post('importar')
+  @RequierePermiso(PERMISOS.AFILIADOS_EDITAR)
+  importar(
+    @Contexto() ctx: ContextoEmpresa,
+    @Body(new ZodPipe(importarAfiliadosSchema)) d: ImportarAfiliadosDatos,
+  ) {
+    return this.afiliados.importar(ctx, d);
   }
 
   @Get(':id')
