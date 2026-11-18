@@ -126,6 +126,19 @@ vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacio
 - `AfiliadoResumen.fotoVersion` e `IngresoVista.fotoVersion` (null = sin foto) alimentan `Avatar`: ficha, lista, recepción y la
   tablet de la entrada (foto grande al ingresar). Suite e2e `foto`. Nunca leer `afiliado_foto.contenido` fuera de `leerFoto`.
 
+## Importar afiliados desde Excel (`afiliados/importar.ts`, `Importar.tsx`, `POST /afiliados/importar`)
+
+- Afiliados → "Importar desde Excel" (`afiliados.editar`): plantilla `.xlsx` armada en el navegador con `exceljs` (carga
+  diferida; hojas Afiliados, Planes con la lista de validación e Instrucciones). Columnas por **título** (el orden no importa):
+  Documento\*, Nombre completo\*, Teléfono, Fecha de nacimiento, Notas, Plan, Vence el, Sesiones restantes. Números y fechas
+  de Excel se leen por su **valor** (`textoCelda`); fechas AAAA-MM-DD o DD/MM/AAAA.
+- Cada fila se valida con `afiliadoImportarFilaSchema` (`@kip/shared`) y los errores salen por fila de Excel y columna; si hay
+  alguno no se envía nada. La API repite las reglas (planes de la empresa y activos, sesiones ≤ las del plan, documentos
+  repetidos en el archivo → 400 «Fila N: …»), máx. 2.000 filas, **todo o nada** en una transacción (`timeout` 120 s).
+- Los documentos que ya existen se **omiten sin modificar**. La membresía entra «como estaba»: plan + `Vence el` (puede ser
+  pasada → queda Vencida), inicio = fin − (días − 1), precio del plan, `sesiones_usadas` = total − restantes; **sin recibo ni
+  caja**. Auditoría `importar` (una por archivo). Suite e2e `importar`; prueba de lectura en `importar.test.ts`.
+
 ## Informes (`apps/api/src/informes`, `@kip/shared` `esquemas/informes.ts`, web `informes/Informes.tsx`, menú Informes)
 
 - Todos con `informes.ver`, de la **sucursal de la sesión**, por `?desde&hasta` (AAAA-MM-DD, días de Colombia, máx. 366

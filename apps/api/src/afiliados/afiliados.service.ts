@@ -22,7 +22,12 @@ import {
   type SuscripcionVista,
   type TipoPlan,
 } from '@kip/shared';
-import { MAX_BYTES_FOTO } from '@kip/shared';
+import { randomUUID } from 'node:crypto';
+import {
+  MAX_BYTES_FOTO,
+  type ImportarAfiliadosDatos,
+  type ResultadoImportarAfiliados,
+} from '@kip/shared';
 import type { ContextoEmpresa } from '../auth/contexto';
 import { registrarAuditoria } from '../comun/auditoria';
 import { aFechaDb, deFechaDb, hoyBogota } from '../comun/fechas';
@@ -311,6 +316,102 @@ export class AfiliadosService {
       });
     });
     return this.obtener(ctx, id);
+  }
+
+  // ───────────── Importación ─────────────
+
+  /**
+   * Todo o nada: crea los afiliados que no existen (mismo documento = se omite sin tocarlo) y, si traen plan,
+   * su membresía tal como estaba (sin cobro). Los errores dicen la fila de la plantilla (la 2 es la primera de datos).
+   */
+  async importar(
+    ctx: ContextoEmpresa,
+    d: ImportarAfiliadosDatos,
+  ): Promise<ResultadoImportarAfiliados> {
+    const planes = new Map(
+      (await this.prisma.planGimnasio.findMany({ where: { empresaId: ctx.empresaId } })).map(
+        (p) => [p.id, p],
+      ),
+    );
+    const vistos = new Map<string, number>();
+    d.filas.forEach((f, i) => {
+      const fila = i + 2;
+      const previo = vistos.get(f.documento);
+      if (previo !== undefined)
+        throw new BadRequestException(
+          `Fila ${fila}: el documento ${f.documento} ya está en la fila ${previo}`,
+        );
+      vistos.set(f.documento, fila);
+      if (!f.planId) return;
+      const plan = planes.get(f.planId);
+      if (!plan) throw new BadRequestException(`Fila ${fila}: el plan no existe`);
+      if (!plan.activo)
+        throw new BadRequestException(`Fila ${fila}: el plan «${plan.nombre}» está inactivo`);
+      if (f.sesionesRestantes !== undefined) {
+        if (plan.sesiones === null)
+          throw new BadRequestException(
+            `Fila ${fila}: «${plan.nombre}» no es tiquetera, no lleva sesiones`,
+          );
+        if (f.sesionesRestantes > plan.sesiones)
+          throw new BadRequestException(
+            `Fila ${fila}: «${plan.nombre}» trae ${plan.sesiones} sesiones; no pueden quedar ${f.sesionesRestantes}`,
+          );
+      }
+    });
+
+    return this.prisma.$transaction(
+      async (tx) => {
+        const existentes = new Set(
+          (
+            await tx.afiliado.findMany({
+              where: { empresaId: ctx.empresaId, documento: { in: [...vistos.keys()] } },
+              select: { documento: true },
+            })
+          ).map((a) => a.documento),
+        );
+        const nuevas = d.filas.filter((f) => !existentes.has(f.documento));
+        const ids = nuevas.map(() => randomUUID());
+        await tx.afiliado.createMany({
+          data: nuevas.map((f, i) => ({ id: ids[i]!, ...this.datosAfiliado(ctx, f) })),
+        });
+        const suscripciones: Prisma.SuscripcionCreateManyInput[] = [];
+        nuevas.forEach((f, i) => {
+          if (!f.planId || !f.venceEl) return;
+          const plan = planes.get(f.planId)!;
+          suscripciones.push({
+            empresaId: ctx.empresaId,
+            sucursalId: ctx.sucursalId,
+            afiliadoId: ids[i]!,
+            planId: plan.id,
+            planNombre: plan.nombre,
+            tipo: plan.tipo,
+            precio: plan.precio,
+            fechaInicio: aFechaDb(sumarDiasFecha(f.venceEl, -(plan.dias - 1))),
+            fechaFin: aFechaDb(f.venceEl),
+            sesionesTotal: plan.sesiones,
+            sesionesUsadas:
+              plan.sesiones !== null && f.sesionesRestantes !== undefined
+                ? plan.sesiones - f.sesionesRestantes
+                : 0,
+            creadoPorId: ctx.usuarioId,
+          });
+        });
+        if (suscripciones.length) await tx.suscripcion.createMany({ data: suscripciones });
+        const omitidos = d.filas.filter((f) => existentes.has(f.documento)).map((f) => f.documento);
+        await registrarAuditoria(tx, ctx, {
+          entidad: 'afiliado',
+          entidadId: ctx.empresaId,
+          accion: 'importar',
+          despues: {
+            creados: nuevas.length,
+            conMembresia: suscripciones.length,
+            omitidos: omitidos.length,
+          },
+        });
+        return { creados: nuevas.length, conMembresia: suscripciones.length, omitidos };
+      },
+      { timeout: 120_000, maxWait: 10_000 },
+    );
   }
 
   // ───────────── Foto ─────────────
