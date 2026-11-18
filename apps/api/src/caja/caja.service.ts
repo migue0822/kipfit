@@ -167,6 +167,24 @@ export class CajaService {
     return Promise.all(filas.map((t) => this.vista(this.prisma, t)));
   }
 
+  /** Todas las cajas de la sucursal en un rango de días (para los informes: el permiso lo exige el controlador). */
+  async turnosDelPeriodo(
+    ctx: ContextoEmpresa,
+    desde: string,
+    hasta: string,
+  ): Promise<TurnoVista[]> {
+    const filas = await this.prisma.turnoCaja.findMany({
+      where: {
+        empresaId: ctx.empresaId,
+        sucursalId: ctx.sucursalId,
+        abiertoEn: { gte: inicioDiaBogota(desde), lt: finDiaBogota(hasta) },
+      },
+      orderBy: { abiertoEn: 'asc' },
+      take: 2000,
+    });
+    return Promise.all(filas.map((t) => this.vista(this.prisma, t)));
+  }
+
   async detalle(ctx: ContextoEmpresa, id: string): Promise<DetalleTurno> {
     const t = await this.prisma.turnoCaja.findFirst({ where: { id, empresaId: ctx.empresaId } });
     if (!t) throw new NotFoundException('Caja no encontrada');

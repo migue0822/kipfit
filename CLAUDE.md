@@ -44,7 +44,7 @@ pnpm --filter @kip/api e2e         # después de build; requiere psql
    (todo permiso nuevo también en `CATALOGO_PERMISOS`, lo verifica una prueba).
 9. **Autenticación propia:** sesiones en servidor (cookie httpOnly `kip_sesion`), Argon2.
 
-## Estado y diseño (Etapas 0 a 3 hechas)
+## Estado y diseño (Etapas 0 a 3 hechas, con informes)
 
 - Núcleo: autenticación, empresas, sucursales, usuarios, roles, auditoría, RLS (`kip_app`) y licencias/planes/pagos.
   Permisos en `packages/shared/src/permisos.ts` (empresa, sucursales, usuarios, afiliados, ingresos, informes) y roles
@@ -116,6 +116,17 @@ vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacio
   panel de cobro en la ficha del afiliado (pago combinado, "Sin cobro" para cortesías, aviso si no hay caja abierta) y
   `#/recibo?id=` (recibo imprimible en otra pestaña). Suite e2e `caja`.
 
+## Informes (`apps/api/src/informes`, `@kip/shared` `esquemas/informes.ts`, web `informes/Informes.tsx`, menú Informes)
+
+- Todos con `informes.ver`, de la **sucursal de la sesión**, por `?desde&hasta` (AAAA-MM-DD, días de Colombia, máx. 366
+  días: `periodoSchema`). Solo cuenta lo vigente (recibos e ingresos anulados no suman).
+- `GET /informes/cobros` (total, por medio, por día, por plan), `/ingresos` (total, personas distintas, alertas, por día,
+  por hora de Colombia, más asiduos), `/vencimientos?dias&vencidasDias` (última membresía vigente de cada afiliado activo;
+  por vencer en N días y vencidas hace ≤ M; las congeladas y las renovadas por adelantado no salen), `/cajas` (turnos
+  abiertos en el período con su cuadre; el cerrado usa su foto).
+- La web (una pantalla, cuatro pestañas): períodos rápidos, CSV para Excel (`;`, BOM), imprimir y, en Vencimientos, botón de
+  WhatsApp (`enlaceWhatsApp` + `mensajeVencimiento`; solo celulares colombianos). Suite e2e `informes`.
+
 ## Registro de empresas, licencias y demostraciones (`apps/api/src/plataforma`, `@kip/shared` `plataforma.ts`)
 
 - Página de ingreso → "Registrarla". `REGISTRO_PUBLICO=no` lo cierra; con `REGISTRO_CODIGO` queda abierto
@@ -167,5 +178,5 @@ vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacio
 1. ✅ Etapa 0: esqueleto Kipfit (núcleo de AviKipu), licencias desde la consola de OrdenKipu.
 2. ✅ Afiliados y planes: fichas, membresías (vender, renovar, congelar, anular) y vencimientos. Falta: foto, importación desde la app de escritorio.
 3. ✅ Ingreso: ventana para tablet con SSE hacia recepción. Falta (opcional): foto/huella en la entrada.
-4. ✅ Cobros y caja (recibos, pago combinado, turnos, cuadre). Siguen: informes y contrato de licencia adaptable a cada app KIPU.
+4. ✅ Cobros y caja (recibos, pago combinado, turnos, cuadre). Informes ✅. Sigue: contrato de licencia adaptable a cada app KIPU.
 5. Respaldos y despliegue en el servidor de Oracle junto a OrdenKipu y AviKipu; modo sin conexión (explorar).
