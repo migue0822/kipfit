@@ -10,6 +10,8 @@ type Opcion = { ruta: Ruta; texto: string; permiso?: string; grupo?: string };
 
 export const MENU: Opcion[] = [
   { ruta: 'inicio', texto: 'Inicio' },
+  { ruta: 'afiliados', texto: 'Afiliados', permiso: PERMISOS.AFILIADOS_VER, grupo: 'Afiliados' },
+  { ruta: 'planes', texto: 'Planes', permiso: PERMISOS.AFILIADOS_VER, grupo: 'Afiliados' },
   {
     ruta: 'usuarios',
     texto: 'Usuarios',
@@ -39,6 +41,8 @@ export function permisoDeRuta(ruta: Ruta): string | undefined {
 /** Ícono de cada grupo del menú (trazos simples, heredan el color del texto). */
 const ICONOS: Record<string, string> = {
   Inicio: 'M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z',
+  Afiliados:
+    'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
   Administración:
     'M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z',
 };

@@ -4,14 +4,14 @@ import { nuevaEmpresa, sql, terminar, verificar } from './comun.mjs';
 const { a, perfil } = await nuevaEmpresa('900555661');
 
 let r = await a('PUT', '/empresa', {
-  razonSocial: 'Distribuidora La Gallina',
-  nombreComercial: 'La Gallina',
+  razonSocial: 'Gimnasio Fuerza',
+  nombreComercial: 'Fuerza',
   telefono: '3001234567',
   direccion: '',
 });
 verificar(
   'edita los datos de la empresa (vacío = sin dato)',
-  r.estado === 200 && r.datos.nombreComercial === 'La Gallina' && r.datos.direccion === null,
+  r.estado === 200 && r.datos.nombreComercial === 'Fuerza' && r.datos.direccion === null,
   JSON.stringify(r.datos),
 );
 

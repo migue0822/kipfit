@@ -1,6 +1,15 @@
 import { useEffect, useState } from 'react';
 
-export const RUTAS = ['inicio', 'usuarios', 'roles', 'sucursales', 'empresa', 'cuenta'] as const;
+export const RUTAS = [
+  'inicio',
+  'afiliados',
+  'planes',
+  'usuarios',
+  'roles',
+  'sucursales',
+  'empresa',
+  'cuenta',
+] as const;
 export type Ruta = (typeof RUTAS)[number];
 export type Parametros = Record<string, string>;
 

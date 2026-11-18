@@ -1,4 +1,4 @@
-import { tienePermiso, type EstadoRegistro } from '@kip/shared';
+import { PERMISOS, tienePermiso, type EstadoRegistro } from '@kip/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { api } from './api';
@@ -7,6 +7,8 @@ import { MiCuenta } from './administracion/MiCuenta';
 import { Roles } from './administracion/Roles';
 import { Sucursales } from './administracion/Sucursales';
 import { Usuarios } from './administracion/Usuarios';
+import { Afiliados } from './afiliados/Afiliados';
+import { Planes } from './afiliados/Planes';
 import { Bienvenida } from './paginas/Bienvenida';
 import { Ingresar } from './paginas/Ingresar';
 import { Inicio } from './paginas/Inicio';
@@ -73,6 +75,10 @@ export function App() {
       ) : (
         <>
           {ruta === 'inicio' && <Inicio perfil={p} ir={ir} />}
+          {ruta === 'afiliados' && <Afiliados perfil={p} />}
+          {ruta === 'planes' && (
+            <Planes puedeEditar={tienePermiso(p.permisos, PERMISOS.AFILIADOS_EDITAR)} />
+          )}
           {ruta === 'usuarios' && <Usuarios perfil={p} />}
           {ruta === 'roles' && <Roles />}
           {ruta === 'sucursales' && <Sucursales />}
