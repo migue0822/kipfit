@@ -60,7 +60,7 @@ pnpm --filter @kip/api e2e         # después de build; requiere psql
 - `plan_gimnasio` (`/planes`): `MENSUAL` (por días) o `TIQUETERA` (sesiones dentro de un plazo; `CHECK` sesiones solo en
   tiquetera). Lectura con `afiliados.ver`, escritura con `afiliados.editar`. Editar un plan no cambia lo ya vendido.
 - `afiliado` (`/afiliados`, patrón de maestros: `buscar`, `estado`, `pagina`; además `membresia=todas|vigentes|por_vencer|
-  vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacios, mayúsculas), `texto_busqueda`,
+vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacios, mayúsculas), `texto_busqueda`,
   sede de inscripción (`sucursal_id`; la membresía sirve en todas las sucursales). Nada se borra: se inactiva.
 - `suscripcion` (la "membresía" del afiliado; el nombre evita chocar con `membresia` = usuario en empresa): foto del plan
   y del precio al vender; `fecha_inicio` y `fecha_fin` (el día de inicio cuenta: 30 días desde el 1 terminan el 30);
