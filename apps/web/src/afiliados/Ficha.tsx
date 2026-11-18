@@ -25,6 +25,7 @@ import { usePerfil } from '../sesion';
 import { Aviso, Boton, Campo, Selector, erroresDeApi, validar, type Errores } from '../ui';
 import { InsigniaEstado, textoSesiones, textoVencimiento } from './comun';
 import { HistorialIngresos } from '../ingresos/Historial';
+import { Avatar, EditorFoto } from './Foto';
 
 /** Ficha del afiliado: datos, membresía actual y su historial, con las acciones de recepción. */
 export function Ficha({ id, puedeEditar }: { id: string; puedeEditar: boolean }) {
@@ -34,6 +35,7 @@ export function Ficha({ id, puedeEditar }: { id: string; puedeEditar: boolean })
     queryFn: () => api<AfiliadoDetalle>(`/afiliados/${id}`),
   });
   const [modo, setModo] = useState<'ver' | 'editar' | 'vender'>('ver');
+  const [fotoAbierta, setFotoAbierta] = useState(false);
   // Recibo del último cobro hecho desde esta ficha: se ofrece verlo e imprimirlo de inmediato.
   const [reciboNuevo, setReciboNuevo] = useState<{ id: string; numero: string } | null>(null);
   const refrescar = () => qc.invalidateQueries({ queryKey: ['afiliados'] });
@@ -58,33 +60,53 @@ export function Ficha({ id, puedeEditar }: { id: string; puedeEditar: boolean })
   return (
     <div className="space-y-5">
       {accion.isError && <Aviso>{accion.error.message}</Aviso>}
-      <div>
-        <h3 className="text-lg font-semibold text-stone-900">
-          {d.nombre} {!d.activo && <Insignia tono="apagado">Inactivo</Insignia>}
-        </h3>
-        <p className="text-sm text-stone-600">
-          Documento {d.documento}
-          {d.telefono ? ` · ${d.telefono}` : ''}
-        </p>
-        <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs text-stone-500">
-          {d.fechaNacimiento && (
-            <>
-              <dt>Nacimiento</dt>
-              <dd className="text-stone-700">{formatoFecha(d.fechaNacimiento)}</dd>
-            </>
+      {fotoAbierta && <EditorFoto afiliado={d} onListo={() => setFotoAbierta(false)} />}
+      <div className="flex items-start gap-4">
+        <div className="flex shrink-0 flex-col items-center gap-1">
+          <Avatar
+            afiliadoId={d.id}
+            nombre={d.nombre}
+            version={d.fotoVersion}
+            tamano="h-20 w-20 text-xl"
+          />
+          {puedeEditar && !fotoAbierta && (
+            <button
+              type="button"
+              onClick={() => setFotoAbierta(true)}
+              className="text-xs text-amber-700 underline"
+            >
+              {d.fotoVersion === null ? 'Agregar foto' : 'Cambiar foto'}
+            </button>
           )}
-          <dt>Inscrito en</dt>
-          <dd className="text-stone-700">{d.sucursalNombre}</dd>
-          {d.referidoPor && (
-            <>
-              <dt>Referido por</dt>
-              <dd className="text-stone-700">{d.referidoPor.nombre}</dd>
-            </>
+        </div>
+        <div className="min-w-0 flex-1">
+          <h3 className="text-lg font-semibold text-stone-900">
+            {d.nombre} {!d.activo && <Insignia tono="apagado">Inactivo</Insignia>}
+          </h3>
+          <p className="text-sm text-stone-600">
+            Documento {d.documento}
+            {d.telefono ? ` · ${d.telefono}` : ''}
+          </p>
+          <dl className="mt-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-xs text-stone-500">
+            {d.fechaNacimiento && (
+              <>
+                <dt>Nacimiento</dt>
+                <dd className="text-stone-700">{formatoFecha(d.fechaNacimiento)}</dd>
+              </>
+            )}
+            <dt>Inscrito en</dt>
+            <dd className="text-stone-700">{d.sucursalNombre}</dd>
+            {d.referidoPor && (
+              <>
+                <dt>Referido por</dt>
+                <dd className="text-stone-700">{d.referidoPor.nombre}</dd>
+              </>
+            )}
+          </dl>
+          {d.notas && (
+            <p className="mt-2 rounded bg-stone-50 px-3 py-2 text-sm text-stone-700">{d.notas}</p>
           )}
-        </dl>
-        {d.notas && (
-          <p className="mt-2 rounded bg-stone-50 px-3 py-2 text-sm text-stone-700">{d.notas}</p>
-        )}
+        </div>
       </div>
 
       <div className="rounded-md border border-stone-200 p-4">

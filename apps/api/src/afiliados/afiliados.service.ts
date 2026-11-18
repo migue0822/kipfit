@@ -22,6 +22,7 @@ import {
   type SuscripcionVista,
   type TipoPlan,
 } from '@kip/shared';
+import { MAX_BYTES_FOTO } from '@kip/shared';
 import type { ContextoEmpresa } from '../auth/contexto';
 import { registrarAuditoria } from '../comun/auditoria';
 import { aFechaDb, deFechaDb, hoyBogota } from '../comun/fechas';
@@ -67,7 +68,14 @@ export function elegirActual(vigentes: SuscripcionVista[], hoy: string): Suscrip
 }
 
 function resumen(
-  a: { id: string; documento: string; nombre: string; telefono: string | null; activo: boolean },
+  a: {
+    id: string;
+    documento: string;
+    nombre: string;
+    telefono: string | null;
+    activo: boolean;
+    foto: { actualizadoEn: Date } | null;
+  },
   vigentes: SuscripcionVista[],
   hoy: string,
 ): AfiliadoResumen {
@@ -84,11 +92,29 @@ function resumen(
     fechaFin: s?.fechaFin ?? null,
     diasRestantes: s ? diasEntre(hoy, s.fechaFin) : null,
     sesionesRestantes: s && s.sesionesTotal !== null ? s.sesionesTotal - s.sesionesUsadas : null,
+    fotoVersion: a.foto ? a.foto.actualizadoEn.getTime() : null,
   };
 }
 
 const textoBusqueda = (d: { nombre: string; documento: string; telefono?: string }) =>
   normalizarBusqueda(`${d.nombre} ${d.documento} ${d.telefono ?? ''}`);
+
+/** Tipo de imagen según sus primeros bytes (no se confía en el encabezado). */
+export function tipoDeImagen(b: Buffer): string | null {
+  if (b.length > 3 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff) return 'image/jpeg';
+  if (
+    b.length > 8 &&
+    b.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))
+  )
+    return 'image/png';
+  if (
+    b.length > 12 &&
+    b.toString('ascii', 0, 4) === 'RIFF' &&
+    b.toString('ascii', 8, 12) === 'WEBP'
+  )
+    return 'image/webp';
+  return null;
+}
 
 @Injectable()
 export class AfiliadosService {
@@ -147,6 +173,7 @@ export class AfiliadosService {
         skip: (q.pagina - 1) * q.porPagina,
         take: q.porPagina,
         include: {
+          foto: { select: { actualizadoEn: true } },
           suscripciones: {
             where: { estado: 'VIGENTE' },
             orderBy: { fechaFin: 'desc' },
@@ -170,6 +197,7 @@ export class AfiliadosService {
     const a = await this.prisma.afiliado.findFirst({
       where: { id, empresaId: ctx.empresaId },
       include: {
+        foto: { select: { actualizadoEn: true } },
         sucursal: { select: { nombre: true } },
         referidoPor: { select: { id: true, nombre: true } },
         suscripciones: {
@@ -283,6 +311,55 @@ export class AfiliadosService {
       });
     });
     return this.obtener(ctx, id);
+  }
+
+  // ───────────── Foto ─────────────
+
+  /** Guarda (o quita, con null) la foto. El tipo se decide por los bytes, no por lo que diga el cliente. */
+  async guardarFoto(
+    ctx: ContextoEmpresa,
+    id: string,
+    foto: string | null,
+  ): Promise<AfiliadoDetalle> {
+    let datos: { tipo: string; contenido: Buffer<ArrayBuffer> } | null = null;
+    if (foto) {
+      const contenido = Buffer.from(
+        foto.slice(foto.indexOf(',') + 1),
+        'base64',
+      ) as Buffer<ArrayBuffer>;
+      const tipo = tipoDeImagen(contenido);
+      if (!tipo) throw new BadRequestException('La foto debe ser JPEG, PNG o WebP');
+      if (contenido.length > MAX_BYTES_FOTO)
+        throw new BadRequestException('La foto es muy pesada (máximo 300 KB)');
+      datos = { tipo, contenido };
+    }
+    await this.prisma.$transaction(async (tx) => {
+      await this.bloquearAfiliado(tx, ctx, id);
+      if (datos) {
+        await tx.afiliadoFoto.upsert({
+          where: { afiliadoId: id },
+          create: { afiliadoId: id, empresaId: ctx.empresaId, ...datos },
+          update: { ...datos, actualizadoEn: new Date() },
+        });
+      } else {
+        await tx.afiliadoFoto.deleteMany({ where: { afiliadoId: id, empresaId: ctx.empresaId } });
+      }
+      await registrarAuditoria(tx, ctx, {
+        entidad: 'afiliado',
+        entidadId: id,
+        accion: datos ? 'cambiar_foto' : 'quitar_foto',
+      });
+    });
+    return this.obtener(ctx, id);
+  }
+
+  async leerFoto(ctx: ContextoEmpresa, id: string) {
+    const f = await this.prisma.afiliadoFoto.findFirst({
+      where: { afiliadoId: id, empresaId: ctx.empresaId },
+      select: { tipo: true, contenido: true },
+    });
+    if (!f) throw new NotFoundException('El afiliado no tiene foto');
+    return f;
   }
 
   // ───────────── Membresías ─────────────

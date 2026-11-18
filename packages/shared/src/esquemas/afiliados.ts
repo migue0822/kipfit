@@ -202,6 +202,8 @@ export type AfiliadoResumen = {
   /** Días que faltan (negativo = vencida hace tantos días). */
   diasRestantes: number | null;
   sesionesRestantes: number | null;
+  /** Versión de la foto (para la dirección `?v=`); null = sin foto. */
+  fotoVersion: number | null;
 };
 
 export type AfiliadoDetalle = AfiliadoResumen & {
@@ -212,6 +214,24 @@ export type AfiliadoDetalle = AfiliadoResumen & {
   creadoEn: string;
   suscripciones: SuscripcionVista[];
 };
+
+// ───────────── Foto ─────────────
+
+/** Tamaño máximo de la foto ya reducida por el navegador (el servidor valida los bytes, no solo el tipo). */
+export const MAX_BYTES_FOTO = 300 * 1024;
+
+export const fotoSchema = z.object({
+  /** `data:image/jpeg;base64,…` (PNG y WebP también); null quita la foto. */
+  foto: z
+    .string()
+    .regex(
+      /^data:image\/(jpeg|png|webp);base64,[A-Za-z0-9+/=]+$/,
+      'La foto debe ser JPEG, PNG o WebP',
+    )
+    .max(Math.ceil((MAX_BYTES_FOTO * 4) / 3) + 64, 'La foto es muy pesada (máximo 300 KB)')
+    .nullable(),
+});
+export type FotoDatos = z.output<typeof fotoSchema>;
 
 // ───────────── Membresías ─────────────
 

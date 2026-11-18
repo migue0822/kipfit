@@ -20,13 +20,17 @@ import { elegirActual } from '../afiliados/afiliados.service';
 
 type Fila = Prisma.IngresoGetPayload<{
   include: {
-    afiliado: { select: { nombre: true; documento: true } };
+    afiliado: {
+      select: { nombre: true; documento: true; foto: { select: { actualizadoEn: true } } };
+    };
     suscripcion: { select: { sesionesTotal: true; sesionesUsadas: true } };
   };
 }>;
 
 const INCLUIR = {
-  afiliado: { select: { nombre: true, documento: true } },
+  afiliado: {
+    select: { nombre: true, documento: true, foto: { select: { actualizadoEn: true } } },
+  },
   suscripcion: { select: { sesionesTotal: true, sesionesUsadas: true } },
 } as const;
 
@@ -44,6 +48,7 @@ export function aVista(i: Fila): IngresoVista {
     afiliadoId: i.afiliadoId,
     afiliadoNombre: i.afiliado.nombre,
     documento: i.afiliado.documento,
+    fotoVersion: i.afiliado.foto ? i.afiliado.foto.actualizadoEn.getTime() : null,
     fechaHora: i.fechaHora.toISOString(),
     origen: i.origen as OrigenIngreso,
     resultado: i.resultado as ResultadoIngreso,

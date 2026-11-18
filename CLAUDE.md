@@ -116,6 +116,16 @@ vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacio
   panel de cobro en la ficha del afiliado (pago combinado, "Sin cobro" para cortesías, aviso si no hay caja abierta) y
   `#/recibo?id=` (recibo imprimible en otra pestaña). Suite e2e `caja`.
 
+## Foto del afiliado (`afiliado_foto`, `afiliados/Foto.tsx`)
+
+- Tabla aparte (`afiliado_foto`, RLS, `CHECK` ≤ 300 KB) para no arrastrar los bytes en las consultas. El navegador la recorta al
+  centro en cuadrado y la reduce a 360 px JPEG (`EditorFoto`: cámara con `getUserMedia` o subir imagen); la API acepta
+  JPEG/PNG/WebP **por sus bytes** (`tipoDeImagen`, no SVG). `PUT /afiliados/:id/foto { foto: dataURL | null }`
+  (`afiliados.editar`, auditoría `cambiar_foto`/`quitar_foto`) y `GET /afiliados/:id/foto` (`afiliados.ver` o
+  `ingresos.registrar`; caché larga con `?v=`).
+- `AfiliadoResumen.fotoVersion` e `IngresoVista.fotoVersion` (null = sin foto) alimentan `Avatar`: ficha, lista, recepción y la
+  tablet de la entrada (foto grande al ingresar). Suite e2e `foto`. Nunca leer `afiliado_foto.contenido` fuera de `leerFoto`.
+
 ## Informes (`apps/api/src/informes`, `@kip/shared` `esquemas/informes.ts`, web `informes/Informes.tsx`, menú Informes)
 
 - Todos con `informes.ver`, de la **sucursal de la sesión**, por `?desde&hasta` (AAAA-MM-DD, días de Colombia, máx. 366
