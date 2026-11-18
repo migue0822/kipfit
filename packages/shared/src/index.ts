@@ -23,3 +23,4 @@ export * from './plataforma.js';
 export * from './esquemas/afiliados.js';
 export * from './esquemas/ingresos.js';
 export * from './esquemas/caja.js';
+export * from './esquemas/informes.js';
