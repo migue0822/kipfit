@@ -34,6 +34,8 @@ export function Ficha({ id, puedeEditar }: { id: string; puedeEditar: boolean })
     queryFn: () => api<AfiliadoDetalle>(`/afiliados/${id}`),
   });
   const [modo, setModo] = useState<'ver' | 'editar' | 'vender'>('ver');
+  // Recibo del último cobro hecho desde esta ficha: se ofrece verlo e imprimirlo de inmediato.
+  const [reciboNuevo, setReciboNuevo] = useState<{ id: string; numero: string } | null>(null);
   const refrescar = () => qc.invalidateQueries({ queryKey: ['afiliados'] });
 
   const accion = useMutation({
@@ -118,11 +120,36 @@ export function Ficha({ id, puedeEditar }: { id: string; puedeEditar: boolean })
         <Vender
           afiliadoId={id}
           onCancelar={() => setModo('ver')}
-          onListo={() => {
+          onListo={(det) => {
             setModo('ver');
+            setReciboNuevo(
+              det.suscripciones.find((x) => x.recibo && !x.recibo.anulado)?.recibo ?? null,
+            );
             void refrescar();
           }}
         />
+      )}
+      {reciboNuevo && modo === 'ver' && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-emerald-200 bg-emerald-50 px-4 py-3">
+          <p className="text-sm text-emerald-900">Cobro registrado. Recibo {reciboNuevo.numero}.</p>
+          <div className="flex gap-2">
+            <a
+              href={`#/recibo?id=${reciboNuevo.id}`}
+              target="_blank"
+              rel="noreferrer"
+              className="rounded-md bg-amber-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-800"
+            >
+              Ver / imprimir recibo
+            </a>
+            <button
+              type="button"
+              className="text-xs text-stone-500 hover:underline"
+              onClick={() => setReciboNuevo(null)}
+            >
+              Cerrar
+            </button>
+          </div>
+        </div>
       )}
 
       <div>
@@ -182,12 +209,12 @@ function FilaMembresia({
         {s.recibo ? (
           <>
             <a
-              className="font-medium text-amber-800 hover:underline"
+              className="rounded border border-amber-300 bg-amber-50 px-2 py-0.5 font-medium text-amber-900 hover:bg-amber-100"
               href={`#/recibo?id=${s.recibo.id}`}
               target="_blank"
               rel="noreferrer"
             >
-              Recibo {s.recibo.numero}
+              Ver / imprimir recibo {s.recibo.numero}
             </a>
             {s.recibo.anulado ? ' (anulado)' : ''} ·{' '}
           </>
@@ -251,7 +278,7 @@ function Vender({
   onCancelar,
 }: {
   afiliadoId: string;
-  onListo: () => void;
+  onListo: (detalle: AfiliadoDetalle) => void;
   onCancelar: () => void;
 }) {
   const qc = useQueryClient();
@@ -294,9 +321,9 @@ function Vender({
             : {}),
         },
       }),
-    onSuccess: () => {
+    onSuccess: (det) => {
       void qc.invalidateQueries({ queryKey: ['caja'] });
-      onListo();
+      onListo(det);
     },
   });
   const activos = (planes.data ?? []).filter((p) => p.activo);
