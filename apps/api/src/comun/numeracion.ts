@@ -8,6 +8,10 @@ import type { Prisma } from '../generated/prisma/client';
 export const PREFIJOS = {
   /** Recibo de un pago (membresía, tienda). */
   RECIBO: 'RC',
+  /** Turno de caja. */
+  TURNO: 'CJ',
+  /** Ingreso o egreso de efectivo de la caja. */
+  MOVIMIENTO: 'MC',
 } as const;
 export type TipoNumeracion = keyof typeof PREFIJOS;
 

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { decimalSchema, listadoQuerySchema, opcional } from '../comun.js';
+import { pagosSchema } from './caja.js';
 
 // ───────────── Planes ─────────────
 
@@ -185,6 +186,8 @@ export type SuscripcionVista = {
   estado: 'VIGENTE' | 'ANULADA';
   motivoAnulacion: string | null;
   creadoEn: string;
+  /** Cobro de la membresía (null = sin cobro registrado). */
+  recibo: { id: string; numero: string; anulado: boolean } | null;
 };
 
 export type AfiliadoResumen = {
@@ -216,6 +219,11 @@ export const membresiaNuevaSchema = z.object({
   planId: z.uuid('Seleccione el plan'),
   /** Por defecto: hoy, o el día siguiente al fin de la vigente. */
   fechaInicio: opcional(fecha),
+  /**
+   * Cómo se pagó (deben sumar el precio del plan; exige caja abierta y genera el recibo). Sin pagos la
+   * membresía queda sin cobro (cortesía o dato de antes): no hay recibo ni movimiento de caja.
+   */
+  pagos: pagosSchema.optional(),
 });
 export type MembresiaNuevaEntrada = z.input<typeof membresiaNuevaSchema>;
 export type MembresiaNuevaDatos = z.output<typeof membresiaNuevaSchema>;

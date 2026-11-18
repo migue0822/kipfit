@@ -20,7 +20,7 @@ verificar('crea una sucursal', r.estado === 201, JSON.stringify(r.datos));
 const s2 = r.datos;
 verificar(
   'la sucursal nueva trae sus numeraciones',
-  sql(`SELECT count(*) FROM numeracion WHERE sucursal_id = '${s2.id}'`) === '1',
+  sql(`SELECT count(*) FROM numeracion WHERE sucursal_id = '${s2.id}'`) === '3',
 );
 r = await a('PUT', `/sucursales/${s2.id}`, { codigo: '03', nombre: 'Plaza' });
 verificar('el código no cambia (400)', r.estado === 400);

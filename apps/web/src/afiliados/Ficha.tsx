@@ -1,6 +1,15 @@
 import {
+  aCentavos,
   afiliadoSchema,
+  deCentavos,
+  ETIQUETA_MEDIO,
   ETIQUETA_TIPO_PLAN,
+  MEDIOS_PAGO,
+  normalizarDecimal,
+  PERMISOS,
+  tienePermiso,
+  type MedioPago,
+  type TurnoVista,
   type AfiliadoDatos,
   type AfiliadoDetalle,
   type AfiliadoEntrada,
@@ -12,6 +21,7 @@ import { useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { Insignia } from '../componentes';
 import { formatoFecha, formatoPesos } from '../formato';
+import { usePerfil } from '../sesion';
 import { Aviso, Boton, Campo, Selector, erroresDeApi, validar, type Errores } from '../ui';
 import { InsigniaEstado, textoSesiones, textoVencimiento } from './comun';
 import { HistorialIngresos } from '../ingresos/Historial';
@@ -169,6 +179,21 @@ function FilaMembresia({
         <span className="text-xs">{formatoPesos(s.precio)}</span>
       </div>
       <p className="text-xs">
+        {s.recibo ? (
+          <>
+            <a
+              className="font-medium text-amber-800 hover:underline"
+              href={`#/recibo?id=${s.recibo.id}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Recibo {s.recibo.numero}
+            </a>
+            {s.recibo.anulado ? ' (anulado)' : ''} ·{' '}
+          </>
+        ) : (
+          !anulada && <span>Sin cobro registrado · </span>
+        )}
         {formatoFecha(s.fechaInicio)} – {formatoFecha(s.fechaFin)}
         {s.sesionesTotal !== null ? ` · ${textoSesiones(s)}` : ''}
         {s.diasCongelados > 0 ? ` · ${s.diasCongelados} días congelados` : ''}
@@ -229,17 +254,55 @@ function Vender({
   onListo: () => void;
   onCancelar: () => void;
 }) {
+  const qc = useQueryClient();
+  const perfil = usePerfil();
+  const puedeCobrar = tienePermiso(perfil.data?.permisos ?? [], PERMISOS.CAJA_OPERAR);
   const planes = useQuery({ queryKey: ['planes'], queryFn: () => api<PlanGimnasio[]>('/planes') });
+  const caja = useQuery({
+    queryKey: ['caja', 'actual'],
+    queryFn: () => api<TurnoVista | null>('/caja/actual'),
+    enabled: puedeCobrar,
+  });
   const [planId, setPlanId] = useState('');
+  const [sinCobro, setSinCobro] = useState(false);
+  // Un renglón por medio de pago; con uno solo, el valor es el precio del plan.
+  const [pagos, setPagos] = useState<{ medio: MedioPago; valor: string }[]>([
+    { medio: 'EFECTIVO', valor: '' },
+  ]);
+  const plan = (planes.data ?? []).find((p) => p.id === planId);
+  const precio = plan ? aCentavos(plan.precio) : 0n;
+  const valorDe = (v: string, i: number) =>
+    pagos.length === 1 && i === 0 ? precio : aCentavos(normalizarDecimal(v) ?? '0');
+  const suma = pagos.reduce((a, p, i) => a + valorDe(p.valor, i), 0n);
+  const cobra = puedeCobrar && !sinCobro && precio > 0n;
+  const cajaCerrada = cobra && caja.data === null;
+  const cuadra = !cobra || suma === precio;
+
   const vender = useMutation({
     mutationFn: () =>
       api<AfiliadoDetalle>(`/afiliados/${afiliadoId}/membresias`, {
         method: 'POST',
-        body: { planId },
+        body: {
+          planId,
+          ...(cobra
+            ? {
+                pagos: pagos.map((p, i) => ({
+                  medio: p.medio,
+                  valor: deCentavos(valorDe(p.valor, i)),
+                })),
+              }
+            : {}),
+        },
       }),
-    onSuccess: onListo,
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['caja'] });
+      onListo();
+    },
   });
   const activos = (planes.data ?? []).filter((p) => p.activo);
+  const usados = new Set(pagos.map((p) => p.medio));
+  const cambiar = (i: number, cambio: Partial<{ medio: MedioPago; valor: string }>) =>
+    setPagos(pagos.map((p, k) => (k === i ? { ...p, ...cambio } : p)));
   return (
     <div className="space-y-3 rounded-md border border-amber-200 bg-amber-50/40 p-4">
       {vender.isError && <Aviso>{vender.error.message}</Aviso>}
@@ -252,15 +315,119 @@ function Vender({
         ))}
       </Selector>
       <p className="text-xs text-stone-500">
-        Empieza hoy, o el día siguiente al vencimiento si todavía tiene membresía vigente. El cobro
-        llega con el módulo de caja.
+        Empieza hoy, o el día siguiente al vencimiento si todavía tiene membresía vigente.
       </p>
+
+      {puedeCobrar && plan && precio > 0n && (
+        <div className="space-y-2 rounded-md border border-stone-200 bg-white p-3">
+          <div className="flex items-center justify-between">
+            <span className="text-sm font-medium text-stone-700">
+              Cobro: {formatoPesos(plan.precio)}
+            </span>
+            <label className="flex items-center gap-2 text-xs text-stone-600">
+              <input
+                type="checkbox"
+                checked={sinCobro}
+                onChange={(e) => setSinCobro(e.target.checked)}
+              />
+              Sin cobro (cortesía)
+            </label>
+          </div>
+          {cajaCerrada && (
+            <p className="rounded bg-red-50 px-3 py-2 text-sm text-red-800">
+              No tiene la caja abierta.{' '}
+              <a className="font-medium underline" href="#/caja">
+                Abra su caja
+              </a>{' '}
+              para cobrar.
+            </p>
+          )}
+          {cobra && (
+            <>
+              {pagos.map((p, i) => (
+                <div key={i} className="flex items-end gap-2">
+                  <div className="w-40">
+                    <Selector
+                      etiqueta={i === 0 ? 'Medio' : 'Otro medio'}
+                      value={p.medio}
+                      onChange={(e) => cambiar(i, { medio: e.target.value as MedioPago })}
+                    >
+                      {MEDIOS_PAGO.filter((m) => m === p.medio || !usados.has(m)).map((m) => (
+                        <option key={m} value={m}>
+                          {ETIQUETA_MEDIO[m]}
+                        </option>
+                      ))}
+                    </Selector>
+                  </div>
+                  <div className="flex-1">
+                    <Campo
+                      etiqueta="Valor"
+                      inputMode="decimal"
+                      value={pagos.length === 1 ? deCentavos(precio).replace(/\.00$/, '') : p.valor}
+                      disabled={pagos.length === 1}
+                      onChange={(e) => cambiar(i, { valor: e.target.value })}
+                    />
+                  </div>
+                  {pagos.length > 1 && (
+                    <button
+                      type="button"
+                      className="pb-2 text-xs text-red-700"
+                      onClick={() => setPagos(pagos.filter((_, k) => k !== i))}
+                    >
+                      Quitar
+                    </button>
+                  )}
+                </div>
+              ))}
+              {pagos.length < MEDIOS_PAGO.length && (
+                <button
+                  type="button"
+                  className="text-xs font-medium text-amber-800 hover:underline"
+                  onClick={() => {
+                    const libre = MEDIOS_PAGO.find((m) => !usados.has(m))!;
+                    // Al pasar a pago combinado, el primero conserva todo el precio para que lo reparta.
+                    setPagos(
+                      pagos.length === 1
+                        ? [
+                            { ...pagos[0]!, valor: deCentavos(precio).replace(/\.00$/, '') },
+                            { medio: libre, valor: '' },
+                          ]
+                        : [...pagos, { medio: libre, valor: '' }],
+                    );
+                  }}
+                >
+                  + Pago combinado (otro medio)
+                </button>
+              )}
+              {pagos.length > 1 && (
+                <p className={`text-xs ${suma === precio ? 'text-emerald-700' : 'text-red-700'}`}>
+                  {suma === precio
+                    ? 'Los pagos suman el precio.'
+                    : suma < precio
+                      ? `Faltan ${formatoPesos(deCentavos(precio - suma))}`
+                      : `Sobran ${formatoPesos(deCentavos(suma - precio))}`}
+                </p>
+              )}
+            </>
+          )}
+        </div>
+      )}
+      {!puedeCobrar && (
+        <p className="text-xs text-stone-500">
+          Su rol no cobra: la membresía queda sin cobro registrado.
+        </p>
+      )}
+
       <div className="flex justify-end gap-2">
         <Boton variante="secundario" onClick={onCancelar}>
           Cancelar
         </Boton>
-        <Boton cargando={vender.isPending} disabled={!planId} onClick={() => vender.mutate()}>
-          Registrar membresía
+        <Boton
+          cargando={vender.isPending}
+          disabled={!planId || cajaCerrada || !cuadra}
+          onClick={() => vender.mutate()}
+        >
+          {cobra ? 'Cobrar y registrar' : 'Registrar membresía'}
         </Boton>
       </div>
     </div>

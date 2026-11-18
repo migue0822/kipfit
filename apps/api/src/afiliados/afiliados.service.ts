@@ -27,11 +27,14 @@ import { registrarAuditoria } from '../comun/auditoria';
 import { aFechaDb, deFechaDb, hoyBogota } from '../comun/fechas';
 import { esViolacionUnica, filtroEstado, terminosBusqueda } from '../comun/pipes';
 import type { Prisma } from '../generated/prisma/client';
+import { CajaService } from '../caja/caja.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const DOC_REPETIDO = 'Ya existe un afiliado con ese documento';
 
-type FilaSuscripcion = Prisma.SuscripcionGetPayload<object>;
+type FilaSuscripcion = Prisma.SuscripcionGetPayload<{
+  include: { recibo: { select: { id: true; prefijo: true; numero: true; estado: true } } };
+}>;
 
 const aSuscripcionVista = (s: FilaSuscripcion): SuscripcionVista => ({
   id: s.id,
@@ -48,6 +51,13 @@ const aSuscripcionVista = (s: FilaSuscripcion): SuscripcionVista => ({
   estado: s.estado as 'VIGENTE' | 'ANULADA',
   motivoAnulacion: s.motivoAnulacion,
   creadoEn: s.creadoEn.toISOString(),
+  recibo: s.recibo
+    ? {
+        id: s.recibo.id,
+        numero: `${s.recibo.prefijo}-${s.recibo.numero}`,
+        anulado: s.recibo.estado === 'ANULADO',
+      }
+    : null,
 });
 
 /** La membresía que cuenta hoy: la vigente ya iniciada que termina más tarde; si ninguna, la próxima. */
@@ -82,7 +92,10 @@ const textoBusqueda = (d: { nombre: string; documento: string; telefono?: string
 
 @Injectable()
 export class AfiliadosService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly caja: CajaService,
+  ) {}
 
   async listar(
     ctx: ContextoEmpresa,
@@ -134,7 +147,14 @@ export class AfiliadosService {
         skip: (q.pagina - 1) * q.porPagina,
         take: q.porPagina,
         include: {
-          suscripciones: { where: { estado: 'VIGENTE' }, orderBy: { fechaFin: 'desc' }, take: 4 },
+          suscripciones: {
+            where: { estado: 'VIGENTE' },
+            orderBy: { fechaFin: 'desc' },
+            take: 4,
+            include: {
+              recibo: { select: { id: true, prefijo: true, numero: true, estado: true } },
+            },
+          },
         },
       }),
     ]);
@@ -152,7 +172,10 @@ export class AfiliadosService {
       include: {
         sucursal: { select: { nombre: true } },
         referidoPor: { select: { id: true, nombre: true } },
-        suscripciones: { orderBy: [{ fechaInicio: 'desc' }, { creadoEn: 'desc' }] },
+        suscripciones: {
+          orderBy: [{ fechaInicio: 'desc' }, { creadoEn: 'desc' }],
+          include: { recibo: { select: { id: true, prefijo: true, numero: true, estado: true } } },
+        },
       },
     });
     if (!a) throw new NotFoundException('Afiliado no encontrado');
@@ -344,6 +367,8 @@ export class AfiliadosService {
       await this.bloquearAfiliado(tx, ctx, afiliadoId);
       const s = await this.suscripcion(tx, ctx, afiliadoId, id);
       if (s.estado === 'ANULADA') throw new ConflictException('La membresía ya está anulada');
+      // Si se cobró, el recibo se anula con ella (solo con la caja del cobro abierta).
+      await this.caja.anularReciboDeMembresia(tx, ctx, id, motivo);
       await tx.suscripcion.update({
         where: { id },
         data: {
@@ -461,5 +486,14 @@ export class AfiliadosService {
       accion: 'crear',
       despues: { afiliadoId, plan: plan.nombre, precio: plan.precio.toFixed(2), inicio, fin },
     });
+    if (d.pagos) {
+      await this.caja.cobrarMembresia(tx, ctx, {
+        afiliadoId,
+        suscripcionId: s.id,
+        concepto: `${plan.nombre} del ${inicio} al ${fin}`,
+        valor: plan.precio.toFixed(2),
+        pagos: d.pagos,
+      });
+    }
   }
 }
