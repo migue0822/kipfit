@@ -25,6 +25,7 @@ import { aJson } from '../comun/auditoria';
 import { aFechaDb, deFechaDb, hoyBogota } from '../comun/fechas';
 import { esViolacionUnica } from '../comun/pipes';
 import type { Prisma } from '../generated/prisma/client';
+import { IngresosService } from '../ingresos/ingresos.service';
 import { PrismaService } from '../prisma/prisma.service';
 
 const selectEmpresa = {
@@ -56,7 +57,10 @@ type FilaEmpresa = Prisma.EmpresaGetPayload<{ select: typeof selectEmpresa }>;
  */
 @Injectable()
 export class PlataformaService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly ingresosSvc: IngresosService,
+  ) {}
 
   // ------------------------------------------------------------ empresas
 
@@ -309,7 +313,7 @@ export class PlataformaService {
   private async completar(filas: FilaEmpresa[]): Promise<EmpresaPlataforma[]> {
     const ids = filas.map((f) => f.id);
     const hoy = hoyBogota();
-    const [ingresos, admins] = await Promise.all([
+    const [ingresos, admins, delMes] = await Promise.all([
       this.prisma.sesion.groupBy({
         by: ['empresaId'],
         where: { empresaId: { in: ids } },
@@ -325,6 +329,7 @@ export class PlataformaService {
         orderBy: { usuario: { creadoEn: 'asc' } },
         select: { empresaId: true, usuario: { select: { nombre: true, email: true } } },
       }),
+      this.ingresosSvc.delMes(ids),
     ]);
     const ingreso = new Map(ingresos.map((i) => [i.empresaId, i._max.creadoEn]));
     const admin = new Map<string, { nombre: string; email: string }>();
@@ -351,8 +356,8 @@ export class PlataformaService {
         usuariosActivos: f._count.membresias,
         sucursalesActivas: f._count.sucursales,
         ultimoIngreso: ingreso.get(f.id)?.toISOString() ?? null,
-        // La consola comparte la forma con OrdenKipu: aquí contará los ingresos del mes desde la Etapa 2.
-        ventasMes: 0,
+        // La consola comparte la forma con OrdenKipu: aquí son los ingresos vigentes del mes.
+        ventasMes: delMes.get(f.id) ?? 0,
         administrador: admin.get(f.id) ?? null,
         telefono: f.telefono,
       };

@@ -43,17 +43,15 @@ pnpm --filter @kip/api e2e         # después de build; requiere psql
    (todo permiso nuevo también en `CATALOGO_PERMISOS`, lo verifica una prueba).
 9. **Autenticación propia:** sesiones en servidor (cookie httpOnly `kip_sesion`), Argon2.
 
-## Estado y diseño (Etapas 0 y 1 hechas)
+## Estado y diseño (Etapas 0, 1 y 2 hechas)
 
 - Núcleo: autenticación, empresas, sucursales, usuarios, roles, auditoría, RLS (`kip_app`) y licencias/planes/pagos.
   Permisos en `packages/shared/src/permisos.ts` (empresa, sucursales, usuarios, afiliados, ingresos, informes) y roles
-  sugeridos Recepción y Supervisor. La pantalla de ingreso aparece como "Próximamente".
+  sugeridos Recepción y Supervisor.
 - Migraciones: armadas a mano desde las de AviKipu (no verificadas con `prisma migrate diff`); verifíquelas con
-  `scripts/verificar-migraciones.sh` en CI antes de desplegar. `ventasMes` de la consola vale 0 hasta contar los
-  ingresos del mes (Etapa 2).
+  `scripts/verificar-migraciones.sh` en CI antes de desplegar. `ventasMes` de la consola = ingresos vigentes del mes.
 - Reglas de diseño para el modo sin conexión (futuro): ids de cliente (UUID), operaciones idempotentes, marcas de
   tiempo del cliente y consecutivos asignados por el servidor al sincronizar.
-- Tiempo real de la ventana de ingreso: SSE (aún no existe en OrdenKipu).
 
 ## Afiliados, planes y membresías (`apps/api/src/afiliados`, `@kip/shared` `esquemas/afiliados.ts`, web `afiliados/`)
 
@@ -71,6 +69,26 @@ vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacio
   las que siguen. El afiliado inactivo o el plan inactivo no venden (409).
 - Aún sin cobro: la venta de membresía guarda el precio pero no genera recibo ni movimiento de caja (Etapa 4). Sin foto,
   huella ni importación del desktop todavía. Suite e2e `afiliados`.
+
+## Ingreso (`apps/api/src/ingresos`, `@kip/shared` `esquemas/ingresos.ts`, web `ingresos/`, menú Ingreso)
+
+- `ingreso` (RLS, por sucursal, nunca se borra): afiliado, membresía usada, `fecha` (día Bogotá), `origen` TABLET |
+  RECEPCION, `resultado` PERMITIDO | ALERTA, foto del estado/plan/vencimiento, `alerta_revisada`, anulación con motivo.
+- `POST /ingresos { id?, documento, origen }` (`ingresos.registrar`): busca por documento (404 si no existe), bloquea el
+  afiliado `FOR UPDATE` y decide con `decidirIngreso` (`@kip/shared`): VIGENTE y POR_VENCER entran; SIN_MEMBRESIA,
+  CONGELADA, VENCIDA, AGOTADA, aún no iniciada o afiliado inactivo → ALERTA (no se impide el paso: lo decide recepción).
+  **Idempotente**: el `id` (UUID del cliente) repetido devuelve el ya guardado (`repetido: true`), listo para el modo sin
+  conexión. La tiquetera gasta **una sesión por día** (`descuenta_sesion`); anular la devuelve (`CHECK` y e2e: sesiones
+  usadas = ingresos vigentes que descuentan).
+- `GET /ingresos?fecha` (día de la sucursal, totales, alertas y pendientes), `GET /ingresos/afiliado/:id`
+  (`afiliados.ver`, historial en la ficha), `PATCH /ingresos/:id/revisar` (recepción acepta la alerta),
+  `POST /ingresos/:id/anular { motivo }`. Con licencia vencida solo se consulta.
+- **Tiempo real**: `GET /ingresos/eventos` (SSE, `@Sse`) de la sucursal de la sesión; `IngresosService.eventos` es un
+  `Subject` en memoria (una sola instancia de la API; si hay varias, hará falta Redis/Postgres NOTIFY). Latido cada 25 s.
+  El Caddy interno no comprime ese camino y usa `flush_interval -1`.
+- Web: `#/ingreso` = **pantalla de la tablet** (sin menú, teclado numérico grande, resultado de 6 s: verde bienvenido,
+  ámbar alerta, rojo error; reintenta con el mismo `id` si falla la red) y `#/ingresos` = **recepción en vivo** (lista
+  del día, pitido y resalte en cada ingreso, Aceptar/Anular, registro manual). Suite e2e `ingresos`.
 
 ## Registro de empresas, licencias y demostraciones (`apps/api/src/plataforma`, `@kip/shared` `plataforma.ts`)
 
@@ -122,6 +140,6 @@ vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacio
 
 1. ✅ Etapa 0: esqueleto Kipfit (núcleo de AviKipu), licencias desde la consola de OrdenKipu.
 2. ✅ Afiliados y planes: fichas, membresías (vender, renovar, congelar, anular) y vencimientos. Falta: foto, importación desde la app de escritorio.
-3. Ingreso: ventana para tablet con SSE hacia recepción.
+3. ✅ Ingreso: ventana para tablet con SSE hacia recepción. Falta (opcional): foto/huella en la entrada.
 4. Cobros, caja e informes; contrato de licencia adaptable a cada app KIPU.
 5. Respaldos y despliegue en el servidor de Oracle junto a OrdenKipu y AviKipu; modo sin conexión (explorar).

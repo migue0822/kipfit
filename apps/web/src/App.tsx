@@ -9,6 +9,8 @@ import { Sucursales } from './administracion/Sucursales';
 import { Usuarios } from './administracion/Usuarios';
 import { Afiliados } from './afiliados/Afiliados';
 import { Planes } from './afiliados/Planes';
+import { Recepcion } from './ingresos/Recepcion';
+import { Tablet } from './ingresos/Tablet';
 import { Bienvenida } from './paginas/Bienvenida';
 import { Ingresar } from './paginas/Ingresar';
 import { Inicio } from './paginas/Inicio';
@@ -65,6 +67,10 @@ export function App() {
 
   const p = perfil.data;
   const permiso = permisoDeRuta(ruta);
+  // La tablet de la entrada: pantalla completa, sin menú.
+  if (ruta === 'ingreso' && permiso && tienePermiso(p.permisos, permiso)) {
+    return <Tablet perfil={p} salir={() => ir('ingresos')} />;
+  }
   return (
     <Marco perfil={p} ruta={ruta} ir={ir}>
       {/* Si alguien escribe la dirección de una pantalla sin permiso. El servidor igual lo impide. */}
@@ -79,6 +85,7 @@ export function App() {
           {ruta === 'planes' && (
             <Planes puedeEditar={tienePermiso(p.permisos, PERMISOS.AFILIADOS_EDITAR)} />
           )}
+          {ruta === 'ingresos' && <Recepcion />}
           {ruta === 'usuarios' && <Usuarios perfil={p} />}
           {ruta === 'roles' && <Roles />}
           {ruta === 'sucursales' && <Sucursales />}

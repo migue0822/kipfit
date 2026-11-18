@@ -14,6 +14,7 @@ import { Insignia } from '../componentes';
 import { formatoFecha, formatoPesos } from '../formato';
 import { Aviso, Boton, Campo, Selector, erroresDeApi, validar, type Errores } from '../ui';
 import { InsigniaEstado, textoSesiones, textoVencimiento } from './comun';
+import { HistorialIngresos } from '../ingresos/Historial';
 
 /** Ficha del afiliado: datos, membresía actual y su historial, con las acciones de recepción. */
 export function Ficha({ id, puedeEditar }: { id: string; puedeEditar: boolean }) {
@@ -134,6 +135,8 @@ export function Ficha({ id, puedeEditar }: { id: string; puedeEditar: boolean })
           </ul>
         )}
       </div>
+
+      <HistorialIngresos afiliadoId={id} />
     </div>
   );
 }

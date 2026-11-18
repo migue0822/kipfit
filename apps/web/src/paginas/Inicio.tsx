@@ -1,7 +1,7 @@
 import { PERMISOS, tienePermiso, type Perfil } from '@kip/shared';
 import type { Ruta } from '../rutas';
 
-type Acceso = { ruta?: Ruta; titulo: string; texto: string; permiso: string; proximo?: boolean };
+type Acceso = { ruta: Ruta; titulo: string; texto: string; permiso: string };
 
 const ACCESOS: Acceso[] = [
   {
@@ -17,10 +17,16 @@ const ACCESOS: Acceso[] = [
     permiso: PERMISOS.AFILIADOS_VER,
   },
   {
-    titulo: 'Ingreso',
-    texto: 'Ventana de ingreso para la tablet de la entrada, con aviso en tiempo real.',
+    ruta: 'ingresos',
+    titulo: 'Ingresos de hoy',
+    texto: 'Quién entró, alertas de membresía y aviso en tiempo real.',
     permiso: PERMISOS.INGRESOS_REGISTRAR,
-    proximo: true,
+  },
+  {
+    ruta: 'ingreso',
+    titulo: 'Pantalla de la tablet',
+    texto: 'La ventana de la entrada: el afiliado digita su documento.',
+    permiso: PERMISOS.INGRESOS_REGISTRAR,
   },
   {
     ruta: 'usuarios',
@@ -51,26 +57,14 @@ export function Inicio({ perfil, ir }: { perfil: Perfil; ir: (r: Ruta) => void }
       <ul className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
         {accesos.map((a) => (
           <li key={a.titulo}>
-            {a.ruta && !a.proximo ? (
-              <button
-                type="button"
-                onClick={() => ir(a.ruta!)}
-                className="h-full w-full rounded-lg border border-stone-200 bg-white p-4 text-left hover:border-amber-400 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-amber-600"
-              >
-                <p className="font-semibold text-stone-900">{a.titulo}</p>
-                <p className="mt-1 text-sm text-stone-600">{a.texto}</p>
-              </button>
-            ) : (
-              <div className="h-full rounded-lg border border-dashed border-stone-300 p-4">
-                <p className="font-semibold text-stone-500">
-                  {a.titulo}{' '}
-                  <span className="ml-1 rounded bg-amber-50 px-1.5 py-0.5 text-xs font-medium text-amber-800">
-                    Próximamente
-                  </span>
-                </p>
-                <p className="mt-1 text-sm text-stone-500">{a.texto}</p>
-              </div>
-            )}
+            <button
+              type="button"
+              onClick={() => ir(a.ruta)}
+              className="h-full w-full rounded-lg border border-stone-200 bg-white p-4 text-left hover:border-amber-400 hover:shadow-sm focus-visible:outline-2 focus-visible:outline-amber-600"
+            >
+              <p className="font-semibold text-stone-900">{a.titulo}</p>
+              <p className="mt-1 text-sm text-stone-600">{a.texto}</p>
+            </button>
           </li>
         ))}
       </ul>
