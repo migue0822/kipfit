@@ -25,6 +25,8 @@ export const MENU: Opcion[] = [
     grupo: 'Ingreso',
   },
   { ruta: 'caja', texto: 'Mi caja', permiso: PERMISOS.CAJA_OPERAR, grupo: 'Caja' },
+  { ruta: 'productos', texto: 'Productos', permiso: PERMISOS.TIENDA_VER, grupo: 'Tienda' },
+  { ruta: 'inventario', texto: 'Inventario', permiso: PERMISOS.TIENDA_VER, grupo: 'Tienda' },
   { ruta: 'informes', texto: 'Informes', permiso: PERMISOS.INFORMES_VER, grupo: 'Informes' },
   {
     ruta: 'usuarios',
@@ -58,6 +60,7 @@ const ICONOS: Record<string, string> = {
   Afiliados:
     'M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2M9 11a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8',
   Caja: 'M3 7h18v12H3zM3 7l2-4h14l2 4M12 11v4M10 13h4',
+  Tienda: 'M3 9l1.5-5h15L21 9M3 9v11h18V9M3 9h18M9 20v-6h6v6',
   Informes: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
   Ingreso: 'M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3',
   Administración:

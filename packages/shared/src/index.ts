@@ -24,3 +24,4 @@ export * from './esquemas/afiliados.js';
 export * from './esquemas/ingresos.js';
 export * from './esquemas/caja.js';
 export * from './esquemas/informes.js';
+export * from './esquemas/tienda.js';

@@ -12,6 +12,14 @@ export const PREFIJOS = {
   TURNO: 'CJ',
   /** Ingreso o egreso de efectivo de la caja. */
   MOVIMIENTO: 'MC',
+  /** Entrada de mercancía a la tienda. */
+  ENTRADA: 'EN',
+  /** Ajuste de inventario (conteo, merma, daño). */
+  AJUSTE: 'AJ',
+  /** Venta de la tienda. */
+  VENTA: 'VT',
+  /** Devolución de una venta de la tienda. */
+  DEVOLUCION: 'DV',
 } as const;
 export type TipoNumeracion = keyof typeof PREFIJOS;
 

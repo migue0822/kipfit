@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { AfiliadosModule } from './afiliados/afiliados.module';
+import { TiendaModule } from './tienda/tienda.module';
 import { InformesModule } from './informes/informes.module';
 import { CajaModule } from './caja/caja.module';
 import { IngresosModule } from './ingresos/ingresos.module';
@@ -21,6 +22,7 @@ import { SaludModule } from './salud/salud.module';
     IngresosModule,
     CajaModule,
     InformesModule,
+    TiendaModule,
     EmpresaModule,
   ],
 })

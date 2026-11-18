@@ -7,6 +7,8 @@ export const RUTAS = [
   'ingresos',
   'ingreso',
   'caja',
+  'productos',
+  'inventario',
   'recibo',
   'informes',
   'usuarios',

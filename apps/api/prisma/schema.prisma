@@ -48,6 +48,10 @@ model Empresa {
   sesiones        Sesion[]
   auditoria       Auditoria[]
 
+  productos   Producto[]
+  existencias Existencia[]
+  documentos  Documento[]
+
   @@map("empresa")
 }
 
@@ -71,6 +75,8 @@ model Sucursal {
   recibos         Recibo[]
   movimientosCaja MovimientoCaja[]
   sesiones        Sesion[]
+  existencias     Existencia[]
+  documentos      Documento[]
 
   @@unique([empresaId, codigo])
   @@index([empresaId])
@@ -475,4 +481,128 @@ model MovimientoCaja {
   @@unique([empresaId, prefijo, numero])
   @@index([turnoId])
   @@map("movimiento_caja")
+}
+
+// ───────────── Tienda: productos e inventario ─────────────
+
+/// Producto de la tienda del gimnasio (bebidas, suplementos…). Se vende por unidades.
+model Producto {
+  id            String   @id @default(uuid()) @db.Uuid
+  empresaId     String   @map("empresa_id") @db.Uuid
+  codigo        String?
+  nombre        String
+  categoria     String?
+  precioVenta   Decimal  @map("precio_venta") @db.Decimal(18, 2)
+  activo        Boolean  @default(true)
+  textoBusqueda String   @default("") @map("texto_busqueda")
+  creadoEn      DateTime @default(now()) @map("creado_en") @db.Timestamptz
+
+  empresa      Empresa               @relation(fields: [empresaId], references: [id])
+  existencias  Existencia[]
+  lineas       DocumentoLinea[]
+  movimientos  MovimientoInventario[]
+
+  @@unique([empresaId, codigo])
+  @@index([empresaId])
+  @@map("producto")
+}
+
+/// Existencia de un producto en una sucursal. El valor (pesos) es la fuente de verdad; el costo promedio se deriva.
+model Existencia {
+  id            String   @id @default(uuid()) @db.Uuid
+  empresaId     String   @map("empresa_id") @db.Uuid
+  sucursalId    String   @map("sucursal_id") @db.Uuid
+  productoId    String   @map("producto_id") @db.Uuid
+  cantidad      Int      @default(0)
+  valor         Decimal  @default(0) @db.Decimal(18, 2)
+  costoPromedio Decimal  @default(0) @map("costo_promedio") @db.Decimal(18, 4)
+
+  empresa  Empresa  @relation(fields: [empresaId], references: [id])
+  sucursal Sucursal @relation(fields: [sucursalId], references: [id])
+  producto Producto @relation(fields: [productoId], references: [id])
+
+  @@unique([sucursalId, productoId])
+  @@index([empresaId])
+  @@map("existencia")
+}
+
+/// Documento de la tienda: ENTRADA (compra), AJUSTE (conteo, merma…), VENTA y DEVOLUCION.
+model Documento {
+  id              String    @id @default(uuid()) @db.Uuid
+  empresaId       String    @map("empresa_id") @db.Uuid
+  sucursalId      String    @map("sucursal_id") @db.Uuid
+  tipo            String
+  prefijo         String
+  numero          BigInt
+  fecha           DateTime  @default(now()) @db.Timestamptz
+  estado          String    @default("VIGENTE") // VIGENTE | ANULADO
+  /// Entrada: factura o remisión del proveedor.
+  referencia      String?
+  proveedor       String?
+  /// Ajuste: CONTEO | MERMA | DANADO | VENCIDO | CONSUMO | OTRO.
+  motivo          String?
+  observaciones   String?
+  /// Costo del documento (entrada: lo pagado; ajuste: valor neto movido).
+  valorTotal      Decimal   @default(0) @map("valor_total") @db.Decimal(18, 2)
+  creadoPorId     String?   @map("creado_por_id") @db.Uuid
+  anuladoEn       DateTime? @map("anulado_en") @db.Timestamptz
+  motivoAnulacion String?   @map("motivo_anulacion")
+
+  empresa     Empresa                @relation(fields: [empresaId], references: [id])
+  sucursal    Sucursal               @relation(fields: [sucursalId], references: [id])
+  lineas      DocumentoLinea[]
+  movimientos MovimientoInventario[]
+
+  @@unique([empresaId, prefijo, numero])
+  @@index([empresaId, sucursalId, fecha])
+  @@map("documento")
+}
+
+model DocumentoLinea {
+  id             String  @id @default(uuid()) @db.Uuid
+  empresaId      String  @map("empresa_id") @db.Uuid
+  documentoId    String  @map("documento_id") @db.Uuid
+  productoId     String  @map("producto_id") @db.Uuid
+  /// Foto del nombre al momento del documento.
+  productoNombre String  @map("producto_nombre")
+  /// Entrada: unidades que entran. Ajuste: diferencia con signo (sistema → contado).
+  cantidad       Int
+  /// Entrada: costo digitado; ajuste: null.
+  costoUnitario  Decimal? @map("costo_unitario") @db.Decimal(18, 4)
+  /// Ajuste de conteo: lo que decía el sistema.
+  sistema        Int?
+  /// Valor de la línea (costo de lo que entró o salió, con signo).
+  valor          Decimal @default(0) @db.Decimal(18, 2)
+  orden          Int     @default(0)
+
+  documento Documento @relation(fields: [documentoId], references: [id])
+  producto  Producto  @relation(fields: [productoId], references: [id])
+
+  @@index([documentoId])
+  @@index([empresaId])
+  @@map("documento_linea")
+}
+
+/// Kardex: una fila por producto y movimiento, con los saldos resultantes.
+model MovimientoInventario {
+  id            BigInt   @id @default(autoincrement())
+  empresaId     String   @map("empresa_id") @db.Uuid
+  sucursalId    String   @map("sucursal_id") @db.Uuid
+  productoId    String   @map("producto_id") @db.Uuid
+  documentoId   String   @map("documento_id") @db.Uuid
+  fecha         DateTime @db.Timestamptz
+  cantidad      Int
+  costoUnitario Decimal  @map("costo_unitario") @db.Decimal(18, 4)
+  valor         Decimal  @db.Decimal(18, 2)
+  saldoCantidad Int      @map("saldo_cantidad")
+  saldoValor    Decimal  @map("saldo_valor") @db.Decimal(18, 2)
+  costoPromedio Decimal  @map("costo_promedio") @db.Decimal(18, 4)
+  esAnulacion   Boolean  @default(false) @map("es_anulacion")
+
+  producto  Producto  @relation(fields: [productoId], references: [id])
+  documento Documento @relation(fields: [documentoId], references: [id])
+
+  @@index([empresaId, sucursalId, productoId, id])
+  @@index([documentoId])
+  @@map("movimiento_inventario")
 }
