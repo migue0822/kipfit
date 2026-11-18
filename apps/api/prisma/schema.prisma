@@ -39,6 +39,7 @@ model Empresa {
   planesGimnasio PlanGimnasio[]
   afiliados      Afiliado[]
   suscripciones  Suscripcion[]
+  ingresos       Ingreso[]
   numeraciones   Numeracion[]
   sesiones       Sesion[]
   auditoria      Auditoria[]
@@ -61,6 +62,7 @@ model Sucursal {
   accesos       MembresiaSucursal[]
   afiliados     Afiliado[]
   suscripciones Suscripcion[]
+  ingresos      Ingreso[]
   sesiones      Sesion[]
 
   @@unique([empresaId, codigo])
@@ -265,6 +267,7 @@ model Afiliado {
   referidoPor   Afiliado?     @relation("Referidos", fields: [referidoPorId], references: [id])
   referidos     Afiliado[]    @relation("Referidos")
   suscripciones Suscripcion[]
+  ingresos      Ingreso[]
 
   @@unique([empresaId, documento])
   @@index([empresaId, nombre])
@@ -298,8 +301,45 @@ model Suscripcion {
   sucursal Sucursal     @relation(fields: [sucursalId], references: [id])
   afiliado Afiliado     @relation(fields: [afiliadoId], references: [id])
   plan     PlanGimnasio @relation(fields: [planId], references: [id])
+  ingresos Ingreso[]
 
   @@index([empresaId, afiliadoId, fechaFin])
   @@index([empresaId, estado, fechaFin])
   @@map("suscripcion")
+}
+
+// ───────────── Ingresos (Etapa 2) ─────────────
+
+/// Cada vez que un afiliado entra al gimnasio. El id lo puede traer el cliente (UUID): reenviar el mismo
+/// ingreso no lo duplica (listo para el modo sin conexión). No se borra: se anula.
+model Ingreso {
+  id              String    @id @db.Uuid
+  empresaId       String    @map("empresa_id") @db.Uuid
+  sucursalId      String    @map("sucursal_id") @db.Uuid
+  afiliadoId      String    @map("afiliado_id") @db.Uuid
+  suscripcionId   String?   @map("suscripcion_id") @db.Uuid
+  fechaHora       DateTime  @default(now()) @map("fecha_hora") @db.Timestamptz
+  /// Día en Colombia (AAAA-MM-DD) del ingreso.
+  fecha           DateTime  @db.Date
+  origen          String // RECEPCION | TABLET
+  resultado       String // PERMITIDO | ALERTA (membresía vencida, congelada o sin membresía)
+  estadoMembresia String    @map("estado_membresia")
+  planNombre      String?   @map("plan_nombre")
+  venceEl         DateTime? @map("vence_el") @db.Date
+  diasVencido     Int       @default(0) @map("dias_vencido")
+  descuentaSesion Boolean   @default(false) @map("descuenta_sesion")
+  /// false = alerta pendiente de que recepción la acepte.
+  alertaRevisada  Boolean   @default(true) @map("alerta_revisada")
+  registradoPorId String?   @map("registrado_por_id") @db.Uuid
+  anuladoEn       DateTime? @map("anulado_en") @db.Timestamptz
+  motivoAnulacion String?   @map("motivo_anulacion")
+
+  empresa     Empresa      @relation(fields: [empresaId], references: [id])
+  sucursal    Sucursal     @relation(fields: [sucursalId], references: [id])
+  afiliado    Afiliado     @relation(fields: [afiliadoId], references: [id])
+  suscripcion Suscripcion? @relation(fields: [suscripcionId], references: [id])
+
+  @@index([empresaId, sucursalId, fecha, fechaHora])
+  @@index([empresaId, afiliadoId, fechaHora])
+  @@map("ingreso")
 }

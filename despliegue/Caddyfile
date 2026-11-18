@@ -10,7 +10,9 @@
 }
 
 :80 {
-	encode zstd gzip
+	# El aviso en tiempo real a recepción (Server-Sent Events) no se comprime ni se retiene.
+	@sinsse not path /api/v1/ingresos/eventos
+	encode @sinsse zstd gzip
 
 	# La API de plataforma solo la usa la consola de OrdenKipu por la red interna "kipu-api", nunca desde internet.
 	handle /api/v1/plataforma* {
@@ -18,7 +20,9 @@
 	}
 
 	handle /api/* {
-		reverse_proxy api:3002
+		reverse_proxy api:3002 {
+			flush_interval -1
+		}
 	}
 
 	handle {
