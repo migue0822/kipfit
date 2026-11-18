@@ -1,6 +1,7 @@
 import { type IngresoVista, type ResumenIngresos } from '@kip/shared';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
+import { Avatar } from '../afiliados/Foto';
 import { api } from '../api';
 import { Aviso, Boton, Campo } from '../ui';
 import { InsigniaResultado, hora, pitar, textoMensaje, useEventosIngreso } from './comun';
@@ -130,6 +131,11 @@ export function Recepcion() {
                 <span className="w-14 text-sm tabular-nums text-stone-500">
                   {hora(i.fechaHora)}
                 </span>
+                <Avatar
+                  afiliadoId={i.afiliadoId}
+                  nombre={i.afiliadoNombre}
+                  version={i.fotoVersion}
+                />
                 <div className="min-w-0 flex-1">
                   <p className="truncate font-medium text-stone-900">
                     {i.afiliadoNombre}{' '}

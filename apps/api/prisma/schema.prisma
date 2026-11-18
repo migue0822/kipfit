@@ -276,10 +276,25 @@ model Afiliado {
   suscripciones Suscripcion[]
   ingresos      Ingreso[]
   recibos       Recibo[]
+  foto          AfiliadoFoto?
 
   @@unique([empresaId, documento])
   @@index([empresaId, nombre])
   @@map("afiliado")
+}
+
+/// Foto del afiliado (JPEG/PNG/WebP reducida por el navegador). Aparte de `afiliado` para no cargar los bytes en cada consulta.
+model AfiliadoFoto {
+  afiliadoId    String   @id @map("afiliado_id") @db.Uuid
+  empresaId     String   @map("empresa_id") @db.Uuid
+  tipo          String
+  contenido     Bytes
+  actualizadoEn DateTime @default(now()) @map("actualizado_en") @db.Timestamptz
+
+  afiliado Afiliado @relation(fields: [afiliadoId], references: [id])
+
+  @@index([empresaId])
+  @@map("afiliado_foto")
 }
 
 /// Una membresía vendida a un afiliado: guarda la foto del plan y del precio al momento de la venta.

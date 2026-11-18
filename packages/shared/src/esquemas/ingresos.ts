@@ -74,6 +74,8 @@ export type IngresoVista = {
   afiliadoId: string;
   afiliadoNombre: string;
   documento: string;
+  /** Versión de la foto del afiliado; null = sin foto. */
+  fotoVersion: number | null;
   fechaHora: string;
   origen: OrigenIngreso;
   resultado: ResultadoIngreso;

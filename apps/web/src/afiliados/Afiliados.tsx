@@ -13,6 +13,7 @@ import {
 import { useQuery } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
 import { api } from '../api';
+import { Avatar } from './Foto';
 import {
   CajaBusqueda,
   Casilla,
@@ -91,19 +92,22 @@ export function Afiliados({ perfil }: { perfil: Perfil }) {
           {
             titulo: 'Afiliado',
             celda: (a) => (
-              <>
-                <span className="font-medium text-stone-900">{a.nombre}</span>
-                {!a.activo && (
-                  <>
-                    {' '}
-                    <Insignia tono="apagado">Inactivo</Insignia>
-                  </>
-                )}
-                <span className="block text-xs text-stone-500">
-                  {a.documento}
-                  {a.telefono ? ` · ${a.telefono}` : ''}
+              <span className="flex items-center gap-3">
+                <Avatar afiliadoId={a.id} nombre={a.nombre} version={a.fotoVersion} />
+                <span className="min-w-0">
+                  <span className="font-medium text-stone-900">{a.nombre}</span>
+                  {!a.activo && (
+                    <>
+                      {' '}
+                      <Insignia tono="apagado">Inactivo</Insignia>
+                    </>
+                  )}
+                  <span className="block text-xs text-stone-500">
+                    {a.documento}
+                    {a.telefono ? ` · ${a.telefono}` : ''}
+                  </span>
                 </span>
-              </>
+              </span>
             ),
           },
           {

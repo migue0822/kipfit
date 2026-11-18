@@ -2,8 +2,14 @@ import { mensajeIngreso, type IngresoVista, type Perfil } from '@kip/shared';
 import { useEffect, useRef, useState } from 'react';
 import { ErrorApi, api } from '../api';
 import { formatoFecha } from '../formato';
+import { urlFoto } from '../afiliados/Foto';
 
-type Resultado = { tipo: 'ok' | 'alerta' | 'error'; titulo: string; detalle: string[] };
+type Resultado = {
+  tipo: 'ok' | 'alerta' | 'error';
+  titulo: string;
+  detalle: string[];
+  foto?: string;
+};
 
 const TECLAS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'C', '0', '←'];
 const SEGUNDOS = 6;
@@ -50,6 +56,7 @@ export function Tablet({ perfil, salir }: { perfil: Perfil; salir: () => void })
         tipo: i.resultado === 'PERMITIDO' ? 'ok' : 'alerta',
         titulo: `${i.resultado === 'PERMITIDO' ? 'Bienvenido' : 'Atención'}, ${i.afiliadoNombre.split(' ')[0]}`,
         detalle: i.resultado === 'PERMITIDO' ? detalle : [mensajeIngreso(i)],
+        foto: i.fotoVersion !== null ? urlFoto(i.afiliadoId, i.fotoVersion) : undefined,
       });
     } catch (e) {
       const sinRed = !(e instanceof ErrorApi);
@@ -119,6 +126,13 @@ export function Tablet({ perfil, salir }: { perfil: Perfil; salir: () => void })
           className={`m-6 flex flex-1 flex-col items-center justify-center rounded-3xl px-6 text-center ${colores[res.tipo]}`}
           aria-live="assertive"
         >
+          {res.foto && (
+            <img
+              src={res.foto}
+              alt=""
+              className="mb-6 h-44 w-44 rounded-full border-4 border-white/70 object-cover sm:h-56 sm:w-56"
+            />
+          )}
           <span className="text-5xl font-bold sm:text-6xl">{res.titulo}</span>
           {res.detalle.map((l) => (
             <span key={l} className="mt-4 text-2xl sm:text-3xl">
