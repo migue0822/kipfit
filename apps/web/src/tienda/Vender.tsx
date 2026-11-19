@@ -17,6 +17,7 @@ import { api } from '../api';
 import { CajaBusqueda, EncabezadoPagina, useRetardado } from '../componentes';
 import { formatoPesos } from '../formato';
 import { Aviso, Boton, Campo, Selector } from '../ui';
+import { WhatsAppVenta } from './WhatsAppVenta';
 
 type Item = { producto: ProductoVista; cantidad: number };
 type Pago = { medio: MedioPago; valor: string };
@@ -25,7 +26,7 @@ const pesos = (c: bigint) => deCentavos(c);
 const entero = (c: bigint) => pesos(c).replace(/\.00$/, '');
 
 /** Punto de venta de la tienda: se cobra por la caja abierta del cajero. */
-export function Vender() {
+export function Vender({ empresa }: { empresa: string }) {
   const qc = useQueryClient();
   const caja = useQuery({
     queryKey: ['caja', 'actual'],
@@ -157,6 +158,7 @@ export function Vender() {
             >
               Imprimir tirilla
             </a>
+            <WhatsAppVenta key={hecha.id} v={hecha} empresa={empresa} />
             <button
               type="button"
               className="rounded-md px-3 py-1.5 font-medium hover:bg-emerald-100"

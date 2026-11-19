@@ -103,7 +103,9 @@ export function App() {
           )}
           {ruta === 'ingresos' && <Recepcion />}
           {ruta === 'caja' && <Caja perfil={p} />}
-          {ruta === 'vender' && <Vender />}
+          {ruta === 'vender' && (
+            <Vender empresa={p.empresa?.nombreComercial ?? p.empresa?.razonSocial ?? ''} />
+          )}
           {ruta === 'ventas' && <Ventas perfil={p} />}
           {ruta === 'productos' && <Productos perfil={p} />}
           {ruta === 'inventario' && <Inventario perfil={p} />}

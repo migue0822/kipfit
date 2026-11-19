@@ -193,6 +193,9 @@ vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacio
 - Web: Tienda → Vender (POS: búsqueda o código exacto + Enter, cuenta, cliente opcional, pago combinado, cambio; tras cobrar,
   enlace a la tirilla `#/venta?id=`), Ventas (detalle, devolver, anular) e Informes → Tienda. Los roles existentes necesitan
   `tienda.vender` + `caja.operar` (Recepción ya los trae si es nueva). Suite e2e `tienda-ventas`.
+- **Recibo por WhatsApp** (`tienda/WhatsAppVenta.tsx`, `mensajeVenta` en `@kip/shared`): al cobrar y en el detalle de la venta;
+  usa el celular del afiliado (`VentaDetalle.afiliadoTelefono`) y, si es cliente de mostrador, **pregunta el celular**
+  (`enlaceWhatsApp`, solo celulares colombianos). WhatsApp web solo manda texto: el mensaje lleva el detalle y el total.
 - Sigue: contrato de licencia adaptable a cada app KIPU; huella y modo sin conexión (después).
 
 ## Registro de empresas, licencias y demostraciones (`apps/api/src/plataforma`, `@kip/shared` `plataforma.ts`)

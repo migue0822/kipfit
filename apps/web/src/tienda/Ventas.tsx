@@ -22,6 +22,7 @@ import {
 } from '../componentes';
 import { formatoFechaHora, formatoPesos, hoyBogota } from '../formato';
 import { Aviso, Boton, Campo, Selector } from '../ui';
+import { WhatsAppVenta } from './WhatsAppVenta';
 
 /** Ventas de la tienda: consulta, reimpresión, devoluciones y anulación. */
 export function Ventas({ perfil }: { perfil: Perfil }) {
@@ -208,6 +209,11 @@ function Detalle({ id, perfil }: { id: string; perfil: Perfil }) {
           >
             Imprimir tirilla
           </a>
+          <WhatsAppVenta
+            key={v.id}
+            v={v}
+            empresa={perfil.empresa?.nombreComercial ?? perfil.empresa?.razonSocial ?? ''}
+          />
           {!v.anulada && puedeVender && hayQueDevolver && (
             <Boton variante="secundario" onClick={() => setModo('devolver')}>
               Devolver productos

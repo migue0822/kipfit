@@ -310,6 +310,8 @@ export type VentaDetalle = VentaResumen & {
   reciboId: string | null;
   reciboNumero: string | null;
   afiliadoDocumento: string | null;
+  /** Celular del afiliado (para enviar el recibo por WhatsApp). */
+  afiliadoTelefono: string | null;
   pagos: { medio: MedioPago; valor: string }[];
   recibido: string | null;
   cambio: string | null;
@@ -337,3 +339,36 @@ export type InformeTienda = {
   porProducto: { producto: string; unidades: number; neto: string; costo: string | null }[];
   porMedio: { medio: MedioPago | 'DEVOLUCIONES'; valor: string }[];
 };
+
+const pesosTexto = (v: string) => {
+  const [e = '0', d = '00'] = v.split('.');
+  const miles = e.replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  return `$${miles}${d === '00' ? '' : `,${d}`}`;
+};
+
+/** Texto del recibo de una venta para WhatsApp (WhatsApp web solo manda texto). */
+export function mensajeVenta(
+  v: {
+    numero: string;
+    fecha: string;
+    total: string;
+    afiliado: string | null;
+    lineas: { cantidad: number; productoNombre: string; total: string }[];
+    pagos: { medio: MedioPago; valor: string }[];
+  },
+  empresa: string,
+  nombreMedio: (m: MedioPago) => string,
+): string {
+  const primero = v.afiliado?.trim().split(/\s+/)[0];
+  const detalle = v.lineas
+    .map((l) => `• ${l.cantidad} × ${l.productoNombre}: ${pesosTexto(l.total)}`)
+    .join('\n');
+  const pagos = v.pagos.map((p) => `${nombreMedio(p.medio)} ${pesosTexto(p.valor)}`).join(', ');
+  return [
+    `${primero ? `Hola ${primero}, g` : 'G'}racias por su compra en ${empresa}.`,
+    `Recibo ${v.numero} (${v.fecha.slice(0, 10).split('-').reverse().join('/')})`,
+    detalle,
+    `*Total: ${pesosTexto(v.total)}*`,
+    `Pago: ${pagos}`,
+  ].join('\n');
+}

@@ -33,7 +33,10 @@ import { aplicarPasos, revertirMovimientos } from './movimientos';
 
 type Tx = Prisma.TransactionClient;
 type FilaVenta = Prisma.DocumentoGetPayload<{
-  include: { lineas: true; afiliado: { select: { nombre: true; documento: true } } };
+  include: {
+    lineas: true;
+    afiliado: { select: { nombre: true; documento: true; telefono: true } };
+  };
 }>;
 
 const numero = (d: { prefijo: string; numero: bigint }) => `${d.prefijo}-${d.numero}`;
@@ -350,7 +353,7 @@ export class VentasService {
       },
       include: {
         lineas: true,
-        afiliado: { select: { nombre: true, documento: true } },
+        afiliado: { select: { nombre: true, documento: true, telefono: true } },
       },
       orderBy: { fecha: 'desc' },
       take: 500,
@@ -368,7 +371,7 @@ export class VentasService {
       where: { id, empresaId: ctx.empresaId, tipo: 'VENTA' },
       include: {
         lineas: { orderBy: { orden: 'asc' } },
-        afiliado: { select: { nombre: true, documento: true } },
+        afiliado: { select: { nombre: true, documento: true, telefono: true } },
       },
     });
     if (!f) throw new NotFoundException('Venta no encontrada');
@@ -402,6 +405,7 @@ export class VentasService {
       reciboId: recibo?.id ?? null,
       reciboNumero: recibo ? numero(recibo) : null,
       afiliadoDocumento: f.afiliado?.documento ?? null,
+      afiliadoTelefono: f.afiliado?.telefono ?? null,
       pagos: (recibo?.pagos ?? []).map((p) => ({
         medio: p.medio as MedioPago,
         valor: p.valor.toFixed(2),
