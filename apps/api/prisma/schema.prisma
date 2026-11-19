@@ -282,6 +282,7 @@ model Afiliado {
   suscripciones Suscripcion[]
   ingresos      Ingreso[]
   recibos       Recibo[]
+  compras       Documento[]
   foto          AfiliadoFoto?
 
   @@unique([empresaId, documento])
@@ -401,6 +402,7 @@ model TurnoCaja {
   sucursal        Sucursal         @relation(fields: [sucursalId], references: [id])
   recibos         Recibo[]
   movimientosCaja MovimientoCaja[]
+  documentos      Documento[]
 
   @@unique([empresaId, prefijo, numero])
   @@index([empresaId, sucursalId, abiertoEn])
@@ -413,8 +415,10 @@ model Recibo {
   empresaId       String    @map("empresa_id") @db.Uuid
   sucursalId      String    @map("sucursal_id") @db.Uuid
   turnoId         String    @map("turno_id") @db.Uuid
-  afiliadoId      String    @map("afiliado_id") @db.Uuid
-  suscripcionId   String    @unique @map("suscripcion_id") @db.Uuid
+  /// Cobro de membresía (afiliado + suscripción) o de una venta de la tienda (documento; afiliado opcional).
+  afiliadoId      String?   @map("afiliado_id") @db.Uuid
+  suscripcionId   String?   @unique @map("suscripcion_id") @db.Uuid
+  documentoId     String?   @unique @map("documento_id") @db.Uuid
   prefijo         String
   numero          BigInt
   concepto        String
@@ -430,8 +434,9 @@ model Recibo {
   empresa     Empresa      @relation(fields: [empresaId], references: [id])
   sucursal    Sucursal     @relation(fields: [sucursalId], references: [id])
   turno       TurnoCaja    @relation(fields: [turnoId], references: [id])
-  afiliado    Afiliado     @relation(fields: [afiliadoId], references: [id])
-  suscripcion Suscripcion  @relation(fields: [suscripcionId], references: [id])
+  afiliado    Afiliado?    @relation(fields: [afiliadoId], references: [id], onDelete: Restrict)
+  suscripcion Suscripcion? @relation(fields: [suscripcionId], references: [id], onDelete: Restrict)
+  documento   Documento?   @relation(fields: [documentoId], references: [id], onDelete: Restrict)
   pagos       ReciboPago[]
 
   @@unique([empresaId, prefijo, numero])
@@ -473,13 +478,17 @@ model MovimientoCaja {
   anuladoEn       DateTime? @map("anulado_en") @db.Timestamptz
   motivoAnulacion String?   @map("motivo_anulacion")
   creadoPorId     String?   @map("creado_por_id") @db.Uuid
+  /// Egreso de una devolución de la tienda: se anula con ella, no desde la caja.
+  documentoId     String?   @map("documento_id") @db.Uuid
 
-  empresa  Empresa   @relation(fields: [empresaId], references: [id])
-  sucursal Sucursal  @relation(fields: [sucursalId], references: [id])
-  turno    TurnoCaja @relation(fields: [turnoId], references: [id])
+  empresa   Empresa    @relation(fields: [empresaId], references: [id])
+  sucursal  Sucursal   @relation(fields: [sucursalId], references: [id])
+  turno     TurnoCaja  @relation(fields: [turnoId], references: [id])
+  documento Documento? @relation(fields: [documentoId], references: [id], onDelete: Restrict)
 
   @@unique([empresaId, prefijo, numero])
   @@index([turnoId])
+  @@index([documentoId])
   @@map("movimiento_caja")
 }
 
@@ -497,10 +506,10 @@ model Producto {
   textoBusqueda String   @default("") @map("texto_busqueda")
   creadoEn      DateTime @default(now()) @map("creado_en") @db.Timestamptz
 
-  empresa      Empresa               @relation(fields: [empresaId], references: [id])
-  existencias  Existencia[]
-  lineas       DocumentoLinea[]
-  movimientos  MovimientoInventario[]
+  empresa     Empresa                @relation(fields: [empresaId], references: [id])
+  existencias Existencia[]
+  lineas      DocumentoLinea[]
+  movimientos MovimientoInventario[]
 
   @@unique([empresaId, codigo])
   @@index([empresaId])
@@ -509,13 +518,13 @@ model Producto {
 
 /// Existencia de un producto en una sucursal. El valor (pesos) es la fuente de verdad; el costo promedio se deriva.
 model Existencia {
-  id            String   @id @default(uuid()) @db.Uuid
-  empresaId     String   @map("empresa_id") @db.Uuid
-  sucursalId    String   @map("sucursal_id") @db.Uuid
-  productoId    String   @map("producto_id") @db.Uuid
-  cantidad      Int      @default(0)
-  valor         Decimal  @default(0) @db.Decimal(18, 2)
-  costoPromedio Decimal  @default(0) @map("costo_promedio") @db.Decimal(18, 4)
+  id            String  @id @default(uuid()) @db.Uuid
+  empresaId     String  @map("empresa_id") @db.Uuid
+  sucursalId    String  @map("sucursal_id") @db.Uuid
+  productoId    String  @map("producto_id") @db.Uuid
+  cantidad      Int     @default(0)
+  valor         Decimal @default(0) @db.Decimal(18, 2)
+  costoPromedio Decimal @default(0) @map("costo_promedio") @db.Decimal(18, 4)
 
   empresa  Empresa  @relation(fields: [empresaId], references: [id])
   sucursal Sucursal @relation(fields: [sucursalId], references: [id])
@@ -528,52 +537,73 @@ model Existencia {
 
 /// Documento de la tienda: ENTRADA (compra), AJUSTE (conteo, merma…), VENTA y DEVOLUCION.
 model Documento {
-  id              String    @id @default(uuid()) @db.Uuid
-  empresaId       String    @map("empresa_id") @db.Uuid
-  sucursalId      String    @map("sucursal_id") @db.Uuid
-  tipo            String
-  prefijo         String
-  numero          BigInt
-  fecha           DateTime  @default(now()) @db.Timestamptz
-  estado          String    @default("VIGENTE") // VIGENTE | ANULADO
+  id                String    @id @default(uuid()) @db.Uuid
+  empresaId         String    @map("empresa_id") @db.Uuid
+  sucursalId        String    @map("sucursal_id") @db.Uuid
+  tipo              String
+  prefijo           String
+  numero            BigInt
+  fecha             DateTime  @default(now()) @db.Timestamptz
+  estado            String    @default("VIGENTE") // VIGENTE | ANULADO
   /// Entrada: factura o remisión del proveedor.
-  referencia      String?
-  proveedor       String?
+  referencia        String?
+  proveedor         String?
   /// Ajuste: CONTEO | MERMA | DANADO | VENCIDO | CONSUMO | OTRO.
-  motivo          String?
-  observaciones   String?
+  motivo            String?
+  observaciones     String?
   /// Costo del documento (entrada: lo pagado; ajuste: valor neto movido).
-  valorTotal      Decimal   @default(0) @map("valor_total") @db.Decimal(18, 2)
-  creadoPorId     String?   @map("creado_por_id") @db.Uuid
-  anuladoEn       DateTime? @map("anulado_en") @db.Timestamptz
-  motivoAnulacion String?   @map("motivo_anulacion")
+  valorTotal        Decimal   @default(0) @map("valor_total") @db.Decimal(18, 2)
+  creadoPorId       String?   @map("creado_por_id") @db.Uuid
+  anuladoEn         DateTime? @map("anulado_en") @db.Timestamptz
+  motivoAnulacion   String?   @map("motivo_anulacion")
+  /// Venta: caja donde se cobró. Devolución en efectivo: caja de donde salió el dinero.
+  turnoId           String?   @map("turno_id") @db.Uuid
+  /// Venta: afiliado que compra (opcional; sin él es venta de mostrador).
+  afiliadoId        String?   @map("afiliado_id") @db.Uuid
+  /// Devolución: la venta de la que sale.
+  documentoOrigenId String?   @map("documento_origen_id") @db.Uuid
+  /// Venta en efectivo: lo que entregó el cliente y el cambio devuelto.
+  recibido          Decimal?  @db.Decimal(18, 2)
+  cambio            Decimal?  @db.Decimal(18, 2)
+  /// Devolución: EFECTIVO (sale de la caja) u OTRO (se devolvió por otro medio, no toca la caja).
+  medioDevolucion   String?   @map("medio_devolucion")
 
-  empresa     Empresa                @relation(fields: [empresaId], references: [id])
-  sucursal    Sucursal               @relation(fields: [sucursalId], references: [id])
-  lineas      DocumentoLinea[]
-  movimientos MovimientoInventario[]
+  empresa         Empresa                @relation(fields: [empresaId], references: [id])
+  sucursal        Sucursal               @relation(fields: [sucursalId], references: [id])
+  turno           TurnoCaja?             @relation(fields: [turnoId], references: [id], onDelete: Restrict)
+  afiliado        Afiliado?              @relation(fields: [afiliadoId], references: [id], onDelete: Restrict)
+  origen          Documento?             @relation("DevolucionDeVenta", fields: [documentoOrigenId], references: [id], onDelete: Restrict)
+  devoluciones    Documento[]            @relation("DevolucionDeVenta")
+  lineas          DocumentoLinea[]
+  movimientos     MovimientoInventario[]
+  recibo          Recibo?
+  movimientosCaja MovimientoCaja[]
 
   @@unique([empresaId, prefijo, numero])
   @@index([empresaId, sucursalId, fecha])
+  @@index([documentoOrigenId])
   @@map("documento")
 }
 
 model DocumentoLinea {
-  id             String  @id @default(uuid()) @db.Uuid
-  empresaId      String  @map("empresa_id") @db.Uuid
-  documentoId    String  @map("documento_id") @db.Uuid
-  productoId     String  @map("producto_id") @db.Uuid
+  id             String   @id @default(uuid()) @db.Uuid
+  empresaId      String   @map("empresa_id") @db.Uuid
+  documentoId    String   @map("documento_id") @db.Uuid
+  productoId     String   @map("producto_id") @db.Uuid
   /// Foto del nombre al momento del documento.
-  productoNombre String  @map("producto_nombre")
+  productoNombre String   @map("producto_nombre")
   /// Entrada: unidades que entran. Ajuste: diferencia con signo (sistema → contado).
   cantidad       Int
   /// Entrada: costo digitado; ajuste: null.
   costoUnitario  Decimal? @map("costo_unitario") @db.Decimal(18, 4)
   /// Ajuste de conteo: lo que decía el sistema.
   sistema        Int?
-  /// Valor de la línea (costo de lo que entró o salió, con signo).
-  valor          Decimal @default(0) @db.Decimal(18, 2)
-  orden          Int     @default(0)
+  /// Valor de la línea (entrada y ajuste: costo con signo; venta y devolución: costo de lo vendido o reintegrado, positivo).
+  valor          Decimal  @default(0) @db.Decimal(18, 2)
+  /// Venta y devolución: precio de venta de la unidad en ese momento y total de la línea.
+  precio         Decimal? @db.Decimal(18, 2)
+  total          Decimal? @db.Decimal(18, 2)
+  orden          Int      @default(0)
 
   documento Documento @relation(fields: [documentoId], references: [id])
   producto  Producto  @relation(fields: [productoId], references: [id])

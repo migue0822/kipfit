@@ -96,7 +96,7 @@ vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacio
 - `turno_caja` (RLS, `CJ` + sucursal): lo abre un cajero con una base; **uno abierto por cajero y sucursal** (índice parcial
   `turno_caja_abierto_unico`, solo en el SQL y en `PROPIOS_DEL_SQL`). Al cerrar guarda `contado`, `esperado`, `diferencia`
   y la foto `resumen`: el cuadre de un turno cerrado no cambia. Si no cuadra exige observaciones.
-- `recibo` (`RC`, uno por `suscripcion`) + `recibo_pago` (una fila por medio: EFECTIVO, TRANSFERENCIA, NEQUI, DAVIPLATA,
+- `recibo` (`RC`, uno por `suscripcion` o por venta de la tienda) + `recibo_pago` (una fila por medio: EFECTIVO, TRANSFERENCIA, NEQUI, DAVIPLATA,
   TARJETA; 1 a 5 distintos, suman exactamente el precio). Se crea **en la misma transacción de la venta**
   (`CajaService.cobrarMembresia`, llamado desde `venderEnTx` cuando vienen `pagos`): exige `caja.operar` y la caja abierta
   del usuario (409 si no). Anular la membresía anula su recibo (`anularReciboDeMembresia`) y solo si la caja del cobro sigue
@@ -168,7 +168,32 @@ vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacio
 - **Costos solo con `tienda.costos`**: costo promedio, valor, costos de líneas y kardex llegan `null` sin él y la web quita
   las columnas. Roles sugeridos: Recepción = ver + vender; Supervisor = todos los `tienda.*`.
   Los roles que ya existen en una empresa no reciben permisos nuevos: agréguelos en Administración → Roles.
-- Suite e2e `tienda-inventario`. Sigue: venta (POS) cobrada por la caja, devoluciones e informes de la tienda.
+- Suite e2e `tienda-inventario`.
+
+## Tienda: ventas, devoluciones e informe (`apps/api/src/tienda/ventas.service.ts`, web `tienda/Vender.tsx`, `Ventas.tsx`, `VentaImpresa.tsx`)
+
+- **Venta** (`POST /tienda/ventas`, `tienda.vender` + `caja.operar`): documento `VENTA` (`VT`) cobrado **por la caja abierta del
+  cajero** (409 si no tiene). Cuerpo: líneas `{productoId, cantidad}`, `total` que vio el cajero (si los precios cambiaron → 409),
+  `pagos` (pago combinado, como en membresías), `recibido` (efectivo entregado; `documento.recibido/cambio`), `afiliadoId`
+  opcional (sin él, mostrador). Todo en una transacción: turno (compartido) → numeración VT → documento → recibo `RC`
+  (`recibo.documento_id`, sin suscripción; `CajaService.cobrarVenta`) → `aplicarPasos` → líneas con `precio`, `total` y `valor` =
+  **costo** de lo vendido (positivo). El cuadre cuenta el efectivo igual que los cobros de membresía; el informe de cobros las
+  agrupa como plan «Tienda». `recibo` ahora exige suscripción **o** documento (`CHECK`); `ReciboVista.afiliado*` pueden ser null.
+- **Anular venta** (`POST /tienda/ventas/:id/anular`, `tienda.anular`): solo sin devoluciones vigentes y con la caja del cobro
+  abierta (`anularReciboDeVenta`); reversa el inventario con el valor exacto.
+- **Devolución** (`POST /tienda/ventas/:id/devolucion`, `tienda.vender`, motivo obligatorio): hasta lo vendido menos lo ya
+  devuelto; reintegra al precio de la línea y al costo proporcional (al completar la línea, exactamente el costo que falta).
+  `medio` EFECTIVO = egreso de la caja abierta de quien devuelve (`movimiento_caja.documento_id`, `exigirEfectivo`; ese egreso
+  no se anula desde Caja → 409) u OTRO = no toca la caja. `POST /tienda/ventas/devoluciones/:id/anular` (`tienda.anular`)
+  anula el egreso (su caja abierta) y reversa el inventario (falla si esas unidades ya se vendieron).
+- **Orden de bloqueo:** documento (venta, luego devolución) → turno → numeración → existencias.
+- `GET /tienda/ventas?desde&hasta&buscar` (hoy por defecto) y `GET /tienda/ventas/:id` (`tienda.ver`; costos `null` sin
+  `tienda.costos`; incluye pagos, devoluciones, `anulable`). Informe `GET /informes/tienda` (`informes.ver`): neto = ventas −
+  devoluciones vigentes por día, producto y medio; costo/utilidad/margen solo con `tienda.costos`.
+- Web: Tienda → Vender (POS: búsqueda o código exacto + Enter, cuenta, cliente opcional, pago combinado, cambio; tras cobrar,
+  enlace a la tirilla `#/venta?id=`), Ventas (detalle, devolver, anular) e Informes → Tienda. Los roles existentes necesitan
+  `tienda.vender` + `caja.operar` (Recepción ya los trae si es nueva). Suite e2e `tienda-ventas`.
+- Sigue: contrato de licencia adaptable a cada app KIPU; huella y modo sin conexión (después).
 
 ## Registro de empresas, licencias y demostraciones (`apps/api/src/plataforma`, `@kip/shared` `plataforma.ts`)
 
@@ -221,5 +246,5 @@ vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacio
 1. ✅ Etapa 0: esqueleto Kipfit (núcleo de AviKipu), licencias desde la consola de OrdenKipu.
 2. ✅ Afiliados y planes: fichas, membresías (vender, renovar, congelar, anular) y vencimientos. Falta: foto, importación desde la app de escritorio.
 3. ✅ Ingreso: ventana para tablet con SSE hacia recepción. Falta (opcional): foto/huella en la entrada.
-4. ✅ Cobros y caja (recibos, pago combinado, turnos, cuadre). Informes ✅. Sigue: contrato de licencia adaptable a cada app KIPU.
+4. ✅ Cobros y caja (recibos, pago combinado, turnos, cuadre). Informes ✅. Tienda ✅ (inventario, ventas por la caja, devoluciones). Sigue: contrato de licencia adaptable a cada app KIPU.
 5. Respaldos y despliegue en el servidor de Oracle junto a OrdenKipu y AviKipu; modo sin conexión (explorar).

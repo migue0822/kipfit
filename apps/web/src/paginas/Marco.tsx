@@ -25,6 +25,8 @@ export const MENU: Opcion[] = [
     grupo: 'Ingreso',
   },
   { ruta: 'caja', texto: 'Mi caja', permiso: PERMISOS.CAJA_OPERAR, grupo: 'Caja' },
+  { ruta: 'vender', texto: 'Vender', permiso: PERMISOS.TIENDA_VENDER, grupo: 'Tienda' },
+  { ruta: 'ventas', texto: 'Ventas', permiso: PERMISOS.TIENDA_VER, grupo: 'Tienda' },
   { ruta: 'productos', texto: 'Productos', permiso: PERMISOS.TIENDA_VER, grupo: 'Tienda' },
   { ruta: 'inventario', texto: 'Inventario', permiso: PERMISOS.TIENDA_VER, grupo: 'Tienda' },
   { ruta: 'informes', texto: 'Informes', permiso: PERMISOS.INFORMES_VER, grupo: 'Informes' },

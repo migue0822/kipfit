@@ -22,8 +22,8 @@ export function Recibo({ id }: { id: string }) {
       </div>
       <dl className="mt-4 space-y-1 text-sm">
         <Fila k="Fecha" v={formatoFechaHora(r.fechaHora)} />
-        <Fila k="Afiliado" v={r.afiliadoNombre} />
-        <Fila k="Documento" v={r.afiliadoDocumento} />
+        {r.afiliadoNombre && <Fila k="Afiliado" v={r.afiliadoNombre} />}
+        {r.afiliadoDocumento && <Fila k="Documento" v={r.afiliadoDocumento} />}
         <Fila k="Concepto" v={r.concepto} />
       </dl>
       <div className="mt-4 border-t border-dashed border-stone-400 pt-3 text-sm">
