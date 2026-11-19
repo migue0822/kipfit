@@ -6,6 +6,7 @@ import {
   type InformeCajas,
   type InformeCobros,
   type InformeIngresos,
+  type InformeTienda,
   type InformeVencimientos,
   type Perfil,
 } from '@kip/shared';
@@ -16,7 +17,7 @@ import { EncabezadoPagina, Segmentos } from '../componentes';
 import { formatoFecha, formatoFechaHora, formatoPesos, hoyBogota } from '../formato';
 import { Aviso, Boton, Campo } from '../ui';
 
-type Pestana = 'cobros' | 'ingresos' | 'vencimientos' | 'cajas';
+type Pestana = 'cobros' | 'ingresos' | 'vencimientos' | 'cajas' | 'tienda';
 
 function sumarDias(fecha: string, n: number): string {
   const d = new Date(`${fecha}T12:00:00Z`);
@@ -480,6 +481,110 @@ function Cajas({ periodo }: { periodo: { desde: string; hasta: string } }) {
 }
 
 /** Informes: cobros, ingresos, membresías por vencer (con WhatsApp) y cierres de caja. */
+function TiendaInforme({ periodo }: { periodo: { desde: string; hasta: string } }) {
+  const q = useQuery({
+    queryKey: ['informes', 'tienda', periodo],
+    queryFn: () =>
+      api<InformeTienda>(`/informes/tienda?desde=${periodo.desde}&hasta=${periodo.hasta}`),
+  });
+  const d = q.data;
+  const conCostos = d?.costo != null;
+  return (
+    <div className="space-y-4">
+      <Estado q={q} />
+      {d && (
+        <>
+          <div className="flex justify-end print:hidden">
+            <Boton
+              variante="secundario"
+              onClick={() =>
+                descargarCsv(`tienda-${d.desde}-a-${d.hasta}.csv`, [
+                  ['Fecha', 'Neto', ...(conCostos ? ['Costo'] : [])],
+                  ...d.porDia.map((x) => [
+                    x.fecha,
+                    num(x.neto),
+                    ...(x.costo ? [num(x.costo)] : []),
+                  ]),
+                  [],
+                  ['Producto', 'Unidades', 'Neto', ...(conCostos ? ['Costo'] : [])],
+                  ...d.porProducto.map((x) => [
+                    x.producto,
+                    x.unidades,
+                    num(x.neto),
+                    ...(x.costo ? [num(x.costo)] : []),
+                  ]),
+                  [],
+                  ['Medio', 'Valor'],
+                  ...d.porMedio.map((x) => [
+                    x.medio === 'DEVOLUCIONES' ? 'Devoluciones' : ETIQUETA_MEDIO[x.medio],
+                    num(x.valor),
+                  ]),
+                ])
+              }
+            >
+              Descargar Excel (CSV)
+            </Boton>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <Cifra
+              titulo="Ventas netas"
+              valor={formatoPesos(d.neto)}
+              nota="Vendido menos devuelto"
+            />
+            <Cifra
+              titulo="Ventas / devoluciones"
+              valor={`${d.ventas} / ${d.devoluciones}`}
+              nota={`${d.unidades} unidades netas`}
+            />
+            {conCostos && (
+              <Cifra
+                titulo="Utilidad"
+                valor={formatoPesos(d.utilidad!)}
+                nota={`Costo ${formatoPesos(d.costo!)}`}
+              />
+            )}
+            {conCostos && (
+              <Cifra titulo="Margen" valor={d.margen ? `${d.margen.replace('.', ',')} %` : '—'} />
+            )}
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            <Bloque titulo="Por medio de pago">
+              <Tabla
+                cabeza={['Medio', 'Valor']}
+                filas={d.porMedio.map((m) => [
+                  m.medio === 'DEVOLUCIONES' ? 'Devoluciones' : ETIQUETA_MEDIO[m.medio],
+                  formatoPesos(m.valor),
+                ])}
+              />
+            </Bloque>
+            <Bloque titulo="Por día">
+              <Tabla
+                cabeza={['Fecha', 'Neto', ...(conCostos ? ['Costo'] : [])]}
+                filas={d.porDia.map((x) => [
+                  formatoFecha(x.fecha),
+                  formatoPesos(x.neto),
+                  ...(x.costo ? [formatoPesos(x.costo)] : []),
+                ])}
+              />
+            </Bloque>
+          </div>
+          <Bloque titulo="Por producto">
+            <Tabla
+              cabeza={['Producto', 'Unidades', 'Neto', ...(conCostos ? ['Costo'] : [])]}
+              filas={d.porProducto.map((x) => [
+                x.producto,
+                x.unidades,
+                formatoPesos(x.neto),
+                ...(x.costo ? [formatoPesos(x.costo)] : []),
+              ])}
+            />
+          </Bloque>
+        </>
+      )}
+    </div>
+  );
+}
+
 export function Informes({ perfil }: { perfil: Perfil }) {
   const [pestana, setPestana] = useState<Pestana>('cobros');
   const [periodo, setPeriodo] = useState(() => periodoRapido('mes'));
@@ -505,6 +610,7 @@ export function Informes({ perfil }: { perfil: Perfil }) {
             { valor: 'ingresos', texto: 'Ingresos' },
             { valor: 'vencimientos', texto: 'Vencimientos' },
             { valor: 'cajas', texto: 'Cajas' },
+            { valor: 'tienda', texto: 'Tienda' },
           ]}
         />
         {pestana !== 'vencimientos' && <FiltroPeriodo periodo={periodo} onCambio={setPeriodo} />}
@@ -513,6 +619,7 @@ export function Informes({ perfil }: { perfil: Perfil }) {
       {pestana === 'ingresos' && <Ingresos periodo={periodo} />}
       {pestana === 'vencimientos' && <Vencimientos empresa={empresa} />}
       {pestana === 'cajas' && <Cajas periodo={periodo} />}
+      {pestana === 'tienda' && <TiendaInforme periodo={periodo} />}
     </>
   );
 }

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { decimalSchema, ESTADOS_FILTRO, opcional } from '../comun.js';
+import { aCentavos, pagosSchema, type MedioPago } from './caja.js';
 
 // ───────────── Productos ─────────────
 
@@ -194,4 +195,145 @@ export type FilaKardex = {
   valor: string | null;
   saldoValor: string | null;
   costoPromedio: string | null;
+};
+
+// ───────────── Ventas y devoluciones ─────────────
+
+const fechaDia = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
+
+export const ventaSchema = z
+  .object({
+    /** Afiliado que compra; sin él es una venta de mostrador. */
+    afiliadoId: z
+      .uuid('Afiliado inválido')
+      .nullish()
+      .transform((v) => v ?? null),
+    lineas: z
+      .array(
+        z.object({
+          productoId: z.uuid('Producto inválido'),
+          cantidad: unidades('La cantidad', 1),
+        }),
+      )
+      .min(1, 'Agregue al menos un producto')
+      .max(100, 'Máximo 100 productos por venta')
+      .superRefine(sinRepetidos),
+    /** Total que vio el cajero: si los precios cambiaron mientras tanto, 409. */
+    total: decimalSchema({ enteros: 12, decimales: 2, nombre: 'El total' }),
+    pagos: pagosSchema,
+    /** Efectivo que entregó el cliente (para el cambio); por defecto, lo cobrado en efectivo. */
+    recibido: opcional(decimalSchema({ enteros: 12, decimales: 2, nombre: 'El valor recibido' })),
+    observaciones: opcional(z.string().trim().max(300)),
+  })
+  .superRefine((v, ctx) => {
+    const efectivo = v.pagos
+      .filter((p) => p.medio === 'EFECTIVO')
+      .reduce((a, p) => a + aCentavos(p.valor), 0n);
+    if (v.recibido && aCentavos(v.recibido) < efectivo) {
+      ctx.addIssue({
+        code: 'custom',
+        path: ['recibido'],
+        message: 'El valor recibido es menor que el efectivo a cobrar',
+      });
+    }
+  });
+export type VentaDatos = z.output<typeof ventaSchema>;
+
+export const MEDIOS_DEVOLUCION = ['EFECTIVO', 'OTRO'] as const;
+export type MedioDevolucion = (typeof MEDIOS_DEVOLUCION)[number];
+export const ETIQUETA_MEDIO_DEVOLUCION: Record<MedioDevolucion, string> = {
+  EFECTIVO: 'Efectivo (sale de la caja)',
+  OTRO: 'Otro medio (transferencia, tarjeta…)',
+};
+
+export const devolucionSchema = z.object({
+  motivo: z.string().trim().min(3, 'Escriba el motivo de la devolución').max(300),
+  medio: z.enum(MEDIOS_DEVOLUCION, { error: 'Indique cómo se devuelve el dinero' }),
+  lineas: z
+    .array(
+      z.object({
+        productoId: z.uuid('Producto inválido'),
+        cantidad: unidades('La cantidad', 1),
+      }),
+    )
+    .min(1, 'Indique qué se devuelve')
+    .max(100)
+    .superRefine(sinRepetidos),
+});
+export type DevolucionDatos = z.output<typeof devolucionSchema>;
+
+export const ventasQuerySchema = z.object({
+  desde: opcional(fechaDia),
+  hasta: opcional(fechaDia),
+  buscar: opcional(z.string().trim().max(60)),
+});
+
+export type VentaResumen = {
+  id: string;
+  numero: string;
+  fecha: string;
+  anulada: boolean;
+  total: string;
+  /** Lo ya devuelto en dinero (devoluciones vigentes). */
+  devuelto: string;
+  unidades: number;
+  afiliado: string | null;
+  cajero: string | null;
+  medios: MedioPago[];
+};
+
+export type LineaVentaVista = {
+  productoId: string;
+  productoNombre: string;
+  cantidad: number;
+  precio: string;
+  total: string;
+  devueltas: number;
+  /** null sin `tienda.costos`. */
+  costo: string | null;
+};
+
+export type DevolucionVista = {
+  id: string;
+  numero: string;
+  fecha: string;
+  anulada: boolean;
+  motivo: string | null;
+  medio: MedioDevolucion;
+  total: string;
+  lineas: { productoNombre: string; cantidad: number; total: string }[];
+};
+
+export type VentaDetalle = VentaResumen & {
+  observaciones: string | null;
+  motivoAnulacion: string | null;
+  reciboId: string | null;
+  reciboNumero: string | null;
+  afiliadoDocumento: string | null;
+  pagos: { medio: MedioPago; valor: string }[];
+  recibido: string | null;
+  cambio: string | null;
+  lineas: LineaVentaVista[];
+  devoluciones: DevolucionVista[];
+  empresa: string;
+  sucursal: string;
+  /** La venta se cobró en una caja que sigue abierta: aún se puede anular. */
+  anulable: boolean;
+};
+
+export type InformeTienda = {
+  desde: string;
+  hasta: string;
+  ventas: number;
+  devoluciones: number;
+  unidades: number;
+  /** Vendido menos devuelto. */
+  neto: string;
+  /** null sin `tienda.costos`. */
+  costo: string | null;
+  utilidad: string | null;
+  margen: string | null;
+  porDia: { fecha: string; neto: string; costo: string | null }[];
+  porProducto: { producto: string; unidades: number; neto: string; costo: string | null }[];
+  porMedio: { medio: MedioPago | 'DEVOLUCIONES'; valor: string }[];
 };

@@ -253,6 +253,11 @@ export class CajaService {
     const m = await this.prisma.$transaction(async (tx) => {
       const mv = await tx.movimientoCaja.findFirst({ where: { id, empresaId: ctx.empresaId } });
       if (!mv) throw new NotFoundException('Movimiento no encontrado');
+      if (mv.documentoId) {
+        throw new ConflictException(
+          'Este egreso es de una devolución de la tienda: se anula anulando la devolución',
+        );
+      }
       const t = await this.turnoCompartido(tx, ctx, mv.turnoId);
       if (t.estado !== 'ABIERTO')
         throw new ConflictException('La caja de este movimiento ya está cerrada');
@@ -372,6 +377,171 @@ export class CajaService {
     await registrarAuditoria(tx, ctx, {
       entidad: 'recibo',
       entidadId: r.id,
+      accion: 'anular',
+      despues: { motivo },
+    });
+  }
+
+  // ───────────── Tienda: ventas y devoluciones ─────────────
+
+  /** La caja abierta del usuario para vender (compartida: el cierre espera). Devuelve su id. */
+  async turnoParaVenta(tx: Tx, ctx: ContextoEmpresa): Promise<string> {
+    if (!tienePermiso(ctx.permisos, PERMISOS.CAJA_OPERAR)) {
+      throw new ForbiddenException('Su rol no puede cobrar: falta el permiso de operar la caja');
+    }
+    const t = await this.turnoPropioCompartido(tx, ctx);
+    return t.id;
+  }
+
+  /** Recibo de caja de una venta de la tienda (el turno ya está bloqueado por `turnoParaVenta`). */
+  async cobrarVenta(
+    tx: Tx,
+    ctx: ContextoEmpresa,
+    d: {
+      turnoId: string;
+      documentoId: string;
+      afiliadoId: string | null;
+      concepto: string;
+      valor: string;
+      pagos: PagoDatos[];
+    },
+  ): Promise<{ id: string; numero: string }> {
+    const total = aCentavos(d.valor);
+    const suma = d.pagos.reduce((a, p) => a + aCentavos(p.valor), 0n);
+    if (suma !== total) {
+      throw new BadRequestException(
+        `Los pagos suman ${deCentavos(suma)} y el total de la venta es ${deCentavos(total)}`,
+      );
+    }
+    const { prefijo, numero } = await tomarConsecutivo(tx, {
+      empresaId: ctx.empresaId,
+      sucursalId: ctx.sucursalId,
+      tipo: 'RECIBO',
+    });
+    const r = await tx.recibo.create({
+      data: {
+        empresaId: ctx.empresaId,
+        sucursalId: ctx.sucursalId,
+        turnoId: d.turnoId,
+        afiliadoId: d.afiliadoId,
+        documentoId: d.documentoId,
+        prefijo,
+        numero,
+        concepto: d.concepto,
+        valor: deCentavos(total),
+        creadoPorId: ctx.usuarioId,
+        pagos: {
+          create: d.pagos.map((p) => ({
+            empresaId: ctx.empresaId,
+            medio: p.medio,
+            valor: deCentavos(aCentavos(p.valor)),
+          })),
+        },
+      },
+    });
+    await registrarAuditoria(tx, ctx, {
+      entidad: 'recibo',
+      entidadId: r.id,
+      accion: 'crear',
+      despues: { numero: nombreNumero(prefijo, numero), valor: deCentavos(total), pagos: d.pagos },
+    });
+    return { id: r.id, numero: nombreNumero(prefijo, numero) };
+  }
+
+  /** Anula el recibo de una venta: solo con la caja del cobro abierta y sin dejar el efectivo en negativo. */
+  async anularReciboDeVenta(tx: Tx, ctx: ContextoEmpresa, documentoId: string, motivo: string) {
+    const r = await tx.recibo.findFirst({
+      where: { documentoId, empresaId: ctx.empresaId, estado: 'VIGENTE' },
+    });
+    if (!r) return;
+    const t = await this.turnoCompartido(tx, ctx, r.turnoId);
+    if (t.estado !== 'ABIERTO') {
+      throw new ConflictException(
+        'La venta se cobró en una caja que ya está cerrada: no se puede anular. Haga una devolución',
+      );
+    }
+    await tx.recibo.update({
+      where: { id: r.id },
+      data: {
+        estado: 'ANULADO',
+        anuladoEn: new Date(),
+        motivoAnulacion: motivo,
+        anuladoTurnoId: t.id,
+      },
+    });
+    await this.exigirNoNegativo(tx, t);
+    await registrarAuditoria(tx, ctx, {
+      entidad: 'recibo',
+      entidadId: r.id,
+      accion: 'anular',
+      despues: { motivo },
+    });
+  }
+
+  /**
+   * Devolución en efectivo: egreso de la caja abierta de quien devuelve, ligado al documento DV.
+   * Devuelve el id del turno para guardarlo en el documento.
+   */
+  async egresoDeDevolucion(
+    tx: Tx,
+    ctx: ContextoEmpresa,
+    d: { documentoId: string; valor: string; concepto: string },
+  ): Promise<string> {
+    const t = await this.turnoPropioCompartido(tx, ctx);
+    await this.exigirEfectivo(tx, t, aCentavos(d.valor));
+    const { prefijo, numero } = await tomarConsecutivo(tx, {
+      empresaId: ctx.empresaId,
+      sucursalId: ctx.sucursalId,
+      tipo: 'MOVIMIENTO',
+    });
+    const mv = await tx.movimientoCaja.create({
+      data: {
+        empresaId: ctx.empresaId,
+        sucursalId: ctx.sucursalId,
+        turnoId: t.id,
+        tipo: 'EGRESO',
+        concepto: d.concepto,
+        valor: d.valor,
+        prefijo,
+        numero,
+        documentoId: d.documentoId,
+        creadoPorId: ctx.usuarioId,
+      },
+    });
+    await registrarAuditoria(tx, ctx, {
+      entidad: 'movimiento_caja',
+      entidadId: mv.id,
+      accion: 'crear',
+      despues: { tipo: 'EGRESO', concepto: d.concepto, valor: d.valor },
+    });
+    return t.id;
+  }
+
+  /** Anula el egreso de una devolución (si lo tiene): solo con su caja abierta. */
+  async anularEgresoDeDevolucion(
+    tx: Tx,
+    ctx: ContextoEmpresa,
+    documentoId: string,
+    motivo: string,
+  ) {
+    const mv = await tx.movimientoCaja.findFirst({
+      where: { documentoId, empresaId: ctx.empresaId, estado: 'VIGENTE' },
+    });
+    if (!mv) return;
+    const t = await this.turnoCompartido(tx, ctx, mv.turnoId);
+    if (t.estado !== 'ABIERTO') {
+      throw new ConflictException(
+        'El dinero de esta devolución salió de una caja que ya está cerrada: no se puede anular',
+      );
+    }
+    await tx.movimientoCaja.update({
+      where: { id: mv.id },
+      data: { estado: 'ANULADO', anuladoEn: new Date(), motivoAnulacion: motivo },
+    });
+    await this.exigirNoNegativo(tx, t);
+    await registrarAuditoria(tx, ctx, {
+      entidad: 'movimiento_caja',
+      entidadId: mv.id,
       accion: 'anular',
       despues: { motivo },
     });
@@ -498,8 +668,8 @@ export class CajaService {
       numero: nombreNumero(r.prefijo, r.numero),
       turnoId: r.turnoId,
       afiliadoId: r.afiliadoId,
-      afiliadoNombre: r.afiliado.nombre,
-      afiliadoDocumento: r.afiliado.documento,
+      afiliadoNombre: r.afiliado?.nombre ?? null,
+      afiliadoDocumento: r.afiliado?.documento ?? null,
       concepto: r.concepto,
       valor: r.valor.toFixed(2),
       fechaHora: r.fechaHora.toISOString(),

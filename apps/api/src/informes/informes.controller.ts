@@ -36,4 +36,10 @@ export class InformesController {
   cajas(@Contexto() ctx: ContextoEmpresa, @Query(new ZodPipe(periodoSchema)) p: PeriodoInforme) {
     return this.informes.cajas(ctx, p);
   }
+
+  @Get('tienda')
+  @RequierePermiso(PERMISOS.INFORMES_VER)
+  tienda(@Contexto() ctx: ContextoEmpresa, @Query(new ZodPipe(periodoSchema)) p: PeriodoInforme) {
+    return this.informes.tienda(ctx, p);
+  }
 }

@@ -8,6 +8,9 @@ import {
   type InformeCajas,
   type InformeCobros,
   type InformeIngresos,
+  type InformeTienda,
+  PERMISOS,
+  tienePermiso,
   type InformeVencimientos,
   type MedioPago,
   type PeriodoInforme,
@@ -53,11 +56,11 @@ export class InformesService {
           AND r.fecha_hora >= ${ini}::timestamptz AND r.fecha_hora < ${fin}::timestamptz
         GROUP BY p.medio ORDER BY sum(p.valor) DESC`,
       this.prisma.$queryRaw<{ plan: string; cantidad: number; valor: string }[]>`
-        SELECT sc.plan_nombre AS plan, count(*)::int AS cantidad, sum(r.valor)::text AS valor
-        FROM recibo r JOIN suscripcion sc ON sc.id = r.suscripcion_id
+        SELECT COALESCE(sc.plan_nombre, 'Tienda') AS plan, count(*)::int AS cantidad, sum(r.valor)::text AS valor
+        FROM recibo r LEFT JOIN suscripcion sc ON sc.id = r.suscripcion_id
         WHERE r.empresa_id = ${e}::uuid AND r.sucursal_id = ${s}::uuid AND r.estado = 'VIGENTE'
           AND r.fecha_hora >= ${ini}::timestamptz AND r.fecha_hora < ${fin}::timestamptz
-        GROUP BY sc.plan_nombre ORDER BY sum(r.valor) DESC`,
+        GROUP BY COALESCE(sc.plan_nombre, 'Tienda') ORDER BY sum(r.valor) DESC`,
       this.prisma.recibo.count({
         where: {
           empresaId: e,
@@ -82,6 +85,82 @@ export class InformesService {
         valor: dinero(d.valor),
       })),
       porPlan: porPlan.map((x) => ({ plan: x.plan, cantidad: x.cantidad, valor: dinero(x.valor) })),
+    };
+  }
+
+  /** Tienda: ventas netas (ventas − devoluciones vigentes) por día, producto y medio. Costos solo con `tienda.costos`. */
+  async tienda(ctx: ContextoEmpresa, p: PeriodoInforme): Promise<InformeTienda> {
+    const ini = inicioDiaBogota(p.desde);
+    const fin = finDiaBogota(p.hasta);
+    const e = ctx.empresaId;
+    const s = ctx.sucursalId;
+    const costos = tienePermiso(ctx.permisos, PERMISOS.TIENDA_COSTOS);
+    const [docs, porDia, porProducto, porMedio] = await Promise.all([
+      this.prisma.$queryRaw<{ tipo: string; docs: number; total: string }[]>`
+        SELECT d.tipo, count(*)::int AS docs, sum(d.valor_total)::text AS total
+        FROM documento d
+        WHERE d.empresa_id = ${e}::uuid AND d.sucursal_id = ${s}::uuid AND d.estado = 'VIGENTE'
+          AND d.tipo IN ('VENTA', 'DEVOLUCION') AND d.fecha >= ${ini}::timestamptz AND d.fecha < ${fin}::timestamptz
+        GROUP BY d.tipo`,
+      this.prisma.$queryRaw<{ fecha: Date; neto: string; costo: string; unidades: number }[]>`
+        SELECT (d.fecha AT TIME ZONE ${ZONA})::date AS fecha,
+               sum(CASE WHEN d.tipo = 'VENTA' THEN l.total ELSE -l.total END)::text AS neto,
+               sum(CASE WHEN d.tipo = 'VENTA' THEN l.valor ELSE -l.valor END)::text AS costo,
+               sum(CASE WHEN d.tipo = 'VENTA' THEN l.cantidad ELSE -l.cantidad END)::int AS unidades
+        FROM documento_linea l JOIN documento d ON d.id = l.documento_id
+        WHERE d.empresa_id = ${e}::uuid AND d.sucursal_id = ${s}::uuid AND d.estado = 'VIGENTE'
+          AND d.tipo IN ('VENTA', 'DEVOLUCION') AND d.fecha >= ${ini}::timestamptz AND d.fecha < ${fin}::timestamptz
+        GROUP BY 1 ORDER BY 1`,
+      this.prisma.$queryRaw<{ producto: string; unidades: number; neto: string; costo: string }[]>`
+        SELECT l.producto_nombre AS producto,
+               sum(CASE WHEN d.tipo = 'VENTA' THEN l.cantidad ELSE -l.cantidad END)::int AS unidades,
+               sum(CASE WHEN d.tipo = 'VENTA' THEN l.total ELSE -l.total END)::text AS neto,
+               sum(CASE WHEN d.tipo = 'VENTA' THEN l.valor ELSE -l.valor END)::text AS costo
+        FROM documento_linea l JOIN documento d ON d.id = l.documento_id
+        WHERE d.empresa_id = ${e}::uuid AND d.sucursal_id = ${s}::uuid AND d.estado = 'VIGENTE'
+          AND d.tipo IN ('VENTA', 'DEVOLUCION') AND d.fecha >= ${ini}::timestamptz AND d.fecha < ${fin}::timestamptz
+        GROUP BY l.producto_id, l.producto_nombre ORDER BY sum(CASE WHEN d.tipo = 'VENTA' THEN l.total ELSE -l.total END) DESC`,
+      this.prisma.$queryRaw<{ medio: MedioPago; valor: string }[]>`
+        SELECT p.medio, sum(p.valor)::text AS valor
+        FROM recibo_pago p JOIN recibo r ON r.id = p.recibo_id JOIN documento d ON d.id = r.documento_id
+        WHERE r.empresa_id = ${e}::uuid AND r.sucursal_id = ${s}::uuid AND r.estado = 'VIGENTE'
+          AND d.estado = 'VIGENTE' AND d.fecha >= ${ini}::timestamptz AND d.fecha < ${fin}::timestamptz
+        GROUP BY p.medio ORDER BY sum(p.valor) DESC`,
+    ]);
+    const dinero = (v: string) => deCentavos(aCentavos(v));
+    const de = (t: string) => docs.find((x) => x.tipo === t);
+    const vendido = aCentavos(de('VENTA')?.total ?? '0');
+    const devuelto = aCentavos(de('DEVOLUCION')?.total ?? '0');
+    const neto = vendido - devuelto;
+    const costo = porDia.reduce((a, d) => a + aCentavos(d.costo), 0n);
+    const utilidad = neto - costo;
+    return {
+      desde: p.desde,
+      hasta: p.hasta,
+      ventas: de('VENTA')?.docs ?? 0,
+      devoluciones: de('DEVOLUCION')?.docs ?? 0,
+      unidades: porDia.reduce((a, d) => a + d.unidades, 0),
+      neto: deCentavos(neto),
+      costo: costos ? deCentavos(costo) : null,
+      utilidad: costos ? deCentavos(utilidad) : null,
+      margen: costos && neto > 0n ? (Number((utilidad * 10000n) / neto) / 100).toFixed(2) : null,
+      porDia: porDia.map((d) => ({
+        fecha: deFechaDb(d.fecha),
+        neto: dinero(d.neto),
+        costo: costos ? dinero(d.costo) : null,
+      })),
+      porProducto: porProducto.map((x) => ({
+        producto: x.producto,
+        unidades: x.unidades,
+        neto: dinero(x.neto),
+        costo: costos ? dinero(x.costo) : null,
+      })),
+      porMedio: [
+        ...porMedio.map((m) => ({ medio: m.medio, valor: dinero(m.valor) })),
+        ...(devuelto > 0n
+          ? [{ medio: 'DEVOLUCIONES' as const, valor: deCentavos(-devuelto) }]
+          : []),
+      ],
     };
   }
 

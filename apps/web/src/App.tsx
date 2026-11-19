@@ -13,6 +13,9 @@ import { Caja } from './caja/Caja';
 import { Recibo } from './caja/Recibo';
 import { Inventario } from './tienda/Inventario';
 import { Productos } from './tienda/Productos';
+import { Vender } from './tienda/Vender';
+import { VentaImpresa } from './tienda/VentaImpresa';
+import { Ventas } from './tienda/Ventas';
 import { Informes } from './informes/Informes';
 import { Recepcion } from './ingresos/Recepcion';
 import { Tablet } from './ingresos/Tablet';
@@ -80,6 +83,10 @@ export function App() {
   if (ruta === 'recibo' && params.id && tienePermiso(p.permisos, PERMISOS.AFILIADOS_VER)) {
     return <Recibo id={params.id} />;
   }
+  // La tirilla de una venta también se abre sola.
+  if (ruta === 'venta' && params.id && tienePermiso(p.permisos, PERMISOS.TIENDA_VER)) {
+    return <VentaImpresa id={params.id} />;
+  }
   return (
     <Marco perfil={p} ruta={ruta} ir={ir}>
       {/* Si alguien escribe la dirección de una pantalla sin permiso. El servidor igual lo impide. */}
@@ -96,6 +103,8 @@ export function App() {
           )}
           {ruta === 'ingresos' && <Recepcion />}
           {ruta === 'caja' && <Caja perfil={p} />}
+          {ruta === 'vender' && <Vender />}
+          {ruta === 'ventas' && <Ventas perfil={p} />}
           {ruta === 'productos' && <Productos perfil={p} />}
           {ruta === 'inventario' && <Inventario perfil={p} />}
           {ruta === 'informes' && <Informes perfil={p} />}

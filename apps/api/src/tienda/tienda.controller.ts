@@ -2,6 +2,11 @@ import { Body, Controller, Get, Param, Patch, Post, Put, Query } from '@nestjs/c
 import {
   ajusteSchema,
   anularDocumentoSchema,
+  devolucionSchema,
+  ventaSchema,
+  ventasQuerySchema,
+  type DevolucionDatos,
+  type VentaDatos,
   cambiarEstadoSchema,
   documentosQuerySchema,
   entradaSchema,
@@ -21,6 +26,7 @@ import { Contexto, RequierePermiso } from '../auth/decoradores';
 import { IdPipe } from '../comun/pipes';
 import { ZodPipe } from '../comun/zod.pipe';
 import { InventarioService } from './inventario.service';
+import { VentasService } from './ventas.service';
 import { ProductosService } from './productos.service';
 
 /** Productos de la tienda (maestro por empresa; la existencia es de la sucursal de la sesión). */
@@ -119,5 +125,62 @@ export class InventarioController {
     @Body(new ZodPipe(anularDocumentoSchema)) d: AnularDocumentoDatos,
   ) {
     return this.inventario.anular(ctx, id, d);
+  }
+}
+
+/** Ventas de la tienda (cobradas por la caja), anulaciones y devoluciones. */
+@Controller('tienda/ventas')
+export class VentasController {
+  constructor(private readonly ventas: VentasService) {}
+
+  @Get()
+  @RequierePermiso(PERMISOS.TIENDA_VER)
+  listar(
+    @Contexto() ctx: ContextoEmpresa,
+    @Query(new ZodPipe(ventasQuerySchema)) q: z.output<typeof ventasQuerySchema>,
+  ) {
+    return this.ventas.listar(ctx, q);
+  }
+
+  @Get(':id')
+  @RequierePermiso(PERMISOS.TIENDA_VER)
+  detalle(@Contexto() ctx: ContextoEmpresa, @Param('id', IdPipe) id: string) {
+    return this.ventas.detalle(ctx, id);
+  }
+
+  @Post()
+  @RequierePermiso(PERMISOS.TIENDA_VENDER)
+  vender(@Contexto() ctx: ContextoEmpresa, @Body(new ZodPipe(ventaSchema)) d: VentaDatos) {
+    return this.ventas.vender(ctx, d);
+  }
+
+  @Post(':id/anular')
+  @RequierePermiso(PERMISOS.TIENDA_ANULAR)
+  anular(
+    @Contexto() ctx: ContextoEmpresa,
+    @Param('id', IdPipe) id: string,
+    @Body(new ZodPipe(anularDocumentoSchema)) d: AnularDocumentoDatos,
+  ) {
+    return this.ventas.anular(ctx, id, d);
+  }
+
+  @Post(':id/devolucion')
+  @RequierePermiso(PERMISOS.TIENDA_VENDER)
+  devolver(
+    @Contexto() ctx: ContextoEmpresa,
+    @Param('id', IdPipe) id: string,
+    @Body(new ZodPipe(devolucionSchema)) d: DevolucionDatos,
+  ) {
+    return this.ventas.devolver(ctx, id, d);
+  }
+
+  @Post('devoluciones/:id/anular')
+  @RequierePermiso(PERMISOS.TIENDA_ANULAR)
+  anularDevolucion(
+    @Contexto() ctx: ContextoEmpresa,
+    @Param('id', IdPipe) id: string,
+    @Body(new ZodPipe(anularDocumentoSchema)) d: AnularDocumentoDatos,
+  ) {
+    return this.ventas.anularDevolucion(ctx, id, d);
   }
 }

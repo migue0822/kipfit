@@ -182,9 +182,10 @@ export type ReciboVista = {
   id: string;
   numero: string;
   turnoId: string;
-  afiliadoId: string;
-  afiliadoNombre: string;
-  afiliadoDocumento: string;
+  /** null en una venta de mostrador de la tienda. */
+  afiliadoId: string | null;
+  afiliadoNombre: string | null;
+  afiliadoDocumento: string | null;
   concepto: string;
   valor: string;
   fechaHora: string;
