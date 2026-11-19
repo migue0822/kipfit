@@ -128,6 +128,10 @@ verificar(
   JSON.stringify(venta),
 );
 verificar(
+  'venta de mostrador: sin afiliado ni celular (el POS pregunta el celular para WhatsApp)',
+  venta.afiliado === null && venta.afiliadoTelefono === null,
+);
+verificar(
   'existencias bajaron: agua 17, proteína 4',
   (await stock(agua.id)).existencia === 17 && (await stock(prot.id)).existencia === 4,
 );
