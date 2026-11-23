@@ -193,6 +193,8 @@ vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacio
 - Web: Tienda → Vender (POS: búsqueda o código exacto + Enter, cuenta, cliente opcional, pago combinado, cambio; tras cobrar,
   enlace a la tirilla `#/venta?id=`), Ventas (detalle, devolver, anular) e Informes → Tienda. Los roles existentes necesitan
   `tienda.vender` + `caja.operar` (Recepción ya los trae si es nueva). Suite e2e `tienda-ventas`.
+- **Caja obligatoria en pantalla** (`caja/ExigirCaja.tsx`): Afiliados → «Nuevo afiliado» y Tienda → Vender solo muestran su
+  contenido con la caja del usuario abierta; si no, piden abrirla (base en efectivo) allí mismo. El servidor ya la exige al cobrar.
 - **Recibo por WhatsApp** (`tienda/WhatsAppVenta.tsx`, `mensajeVenta` en `@kip/shared`): al cobrar y en el detalle de la venta;
   usa el celular del afiliado (`VentaDetalle.afiliadoTelefono`) y, si es cliente de mostrador, **pregunta el celular**
   (`enlaceWhatsApp`, solo celulares colombianos). WhatsApp web solo manda texto: el mensaje lleva el detalle y el total.

@@ -12,6 +12,7 @@ import {
 } from '@kip/shared';
 import { useQuery } from '@tanstack/react-query';
 import { useState, type FormEvent } from 'react';
+import { ExigirCaja } from '../caja/ExigirCaja';
 import { api } from '../api';
 import { Avatar } from './Foto';
 import {
@@ -150,7 +151,13 @@ export function Afiliados({ perfil }: { perfil: Perfil }) {
         onCerrar={() => setAbierto(null)}
       >
         {abierto === 'nuevo' && (
-          <NuevoAfiliado onCreado={(a) => setAbierto(a.id)} onCancelar={() => setAbierto(null)} />
+          <ExigirCaja
+            perfil={perfil}
+            motivo="Un afiliado nuevo normalmente paga su primera membresía."
+            onCancelar={() => setAbierto(null)}
+          >
+            <NuevoAfiliado onCreado={(a) => setAbierto(a.id)} onCancelar={() => setAbierto(null)} />
+          </ExigirCaja>
         )}
         {abierto !== null && abierto !== 'nuevo' && (
           <Ficha key={abierto} id={abierto} puedeEditar={puedeEditar} />
