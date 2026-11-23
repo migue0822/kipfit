@@ -12,6 +12,7 @@ export const RUTAS = [
   'productos',
   'inventario',
   'recibo',
+  'cierre',
   'venta',
   'informes',
   'usuarios',

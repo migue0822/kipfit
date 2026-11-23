@@ -299,6 +299,19 @@ const v2 = (
   })
 ).datos;
 const turno = (await a('GET', '/caja/actual')).datos;
+const det = (await a('GET', `/caja/turnos/${turno.id}`)).datos;
+verificar(
+  'detalle del turno para la tirilla completa: empresa, productos y devoluciones en efectivo',
+  !!det.empresa &&
+    !!det.sucursal &&
+    det.productos.length === 1 &&
+    det.productos[0].producto === 'Agua 600 ml' &&
+    det.productos[0].cantidad === 2 &&
+    det.productos[0].total === '6000.00' &&
+    det.devoluciones.length === 1 &&
+    det.devoluciones[0].anulada === true,
+  JSON.stringify([det.productos, det.devoluciones]),
+);
 r = await a('POST', `/caja/turnos/${turno.id}/cerrar`, { contado: '56000' });
 verificar('cerrar la caja', r.estado === 201 || r.estado === 200, JSON.stringify(r.datos));
 verificar(

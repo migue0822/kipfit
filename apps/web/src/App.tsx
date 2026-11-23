@@ -10,6 +10,7 @@ import { Usuarios } from './administracion/Usuarios';
 import { Afiliados } from './afiliados/Afiliados';
 import { Planes } from './afiliados/Planes';
 import { Caja } from './caja/Caja';
+import { CierreImpreso } from './caja/CierreImpreso';
 import { Recibo } from './caja/Recibo';
 import { Inventario } from './tienda/Inventario';
 import { Productos } from './tienda/Productos';
@@ -85,6 +86,19 @@ export function App() {
     return <Recibo id={params.id} />;
   }
   // La tirilla de una venta también se abre sola.
+  if (
+    ruta === 'cierre' &&
+    params.id &&
+    (tienePermiso(p.permisos, PERMISOS.CAJA_OPERAR) ||
+      tienePermiso(p.permisos, PERMISOS.CAJA_SUPERVISAR))
+  ) {
+    return (
+      <CierreImpreso
+        id={params.id}
+        formato={params.formato === 'completo' ? 'completo' : 'resumido'}
+      />
+    );
+  }
   if (ruta === 'venta' && params.id && tienePermiso(p.permisos, PERMISOS.TIENDA_VER)) {
     return <VentaImpresa id={params.id} />;
   }
