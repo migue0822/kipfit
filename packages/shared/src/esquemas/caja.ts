@@ -200,4 +200,10 @@ export type ReciboVista = {
 export type DetalleTurno = TurnoVista & {
   recibos: ReciboVista[];
   movimientos: MovimientoVista[];
+  empresa: string;
+  sucursal: string;
+  /** Tienda: lo vendido en esta caja por producto (ventas vigentes). */
+  productos: { producto: string; cantidad: number; total: string }[];
+  /** Tienda: devoluciones en efectivo hechas en esta caja. */
+  devoluciones: { numero: string; total: string; motivo: string | null; anulada: boolean }[];
 };

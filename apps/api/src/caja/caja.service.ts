@@ -191,7 +191,7 @@ export class CajaService {
     if (t.cajeroId !== ctx.usuarioId && !tienePermiso(ctx.permisos, PERMISOS.CAJA_SUPERVISAR)) {
       throw new ForbiddenException('Solo el cajero o un supervisor ve esta caja');
     }
-    const [recibos, movimientos] = await Promise.all([
+    const [recibos, movimientos, lineas, devs, emp, suc] = await Promise.all([
       this.prisma.recibo.findMany({
         where: { turnoId: id, empresaId: ctx.empresaId },
         include: { pagos: true, afiliado: { select: { nombre: true, documento: true } } },
@@ -201,9 +201,45 @@ export class CajaService {
         where: { turnoId: id, empresaId: ctx.empresaId },
         orderBy: { fechaHora: 'asc' },
       }),
+      this.prisma.documentoLinea.findMany({
+        where: {
+          empresaId: ctx.empresaId,
+          documento: { turnoId: id, tipo: 'VENTA', estado: 'VIGENTE' },
+        },
+        select: { productoNombre: true, cantidad: true, total: true },
+      }),
+      this.prisma.documento.findMany({
+        where: { turnoId: id, empresaId: ctx.empresaId, tipo: 'DEVOLUCION' },
+        select: { prefijo: true, numero: true, valorTotal: true, motivo: true, estado: true },
+        orderBy: { fecha: 'asc' },
+      }),
+      this.prisma.empresa.findUnique({
+        where: { id: ctx.empresaId },
+        select: { razonSocial: true, nombreComercial: true },
+      }),
+      this.prisma.sucursal.findUnique({ where: { id: t.sucursalId }, select: { nombre: true } }),
     ]);
+    const porProducto = new Map<string, { cantidad: number; total: bigint }>();
+    for (const l of lineas) {
+      const a = porProducto.get(l.productoNombre) ?? { cantidad: 0, total: 0n };
+      porProducto.set(l.productoNombre, {
+        cantidad: a.cantidad + l.cantidad,
+        total: a.total + aCentavos((l.total ?? 0).toString()),
+      });
+    }
     return {
       ...(await this.vista(this.prisma, t)),
+      empresa: emp?.nombreComercial ?? emp?.razonSocial ?? '',
+      sucursal: suc?.nombre ?? '',
+      productos: [...porProducto]
+        .map(([producto, v]) => ({ producto, cantidad: v.cantidad, total: deCentavos(v.total) }))
+        .sort((a, b) => a.producto.localeCompare(b.producto, 'es')),
+      devoluciones: devs.map((d) => ({
+        numero: nombreNumero(d.prefijo, d.numero),
+        total: d.valorTotal.toFixed(2),
+        motivo: d.motivo,
+        anulada: d.estado === 'ANULADO',
+      })),
       recibos: await Promise.all(recibos.map((r) => this.reciboVista(r))),
       movimientos: movimientos.map(aMovimiento),
     };

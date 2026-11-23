@@ -14,6 +14,7 @@ import { useState, type FormEvent } from 'react';
 import { api } from '../api';
 import { formatoFechaHora, formatoPesos } from '../formato';
 import { Insignia } from '../componentes';
+import { ImprimirCierre } from './CierreImpreso';
 import { Aviso, Boton, Campo, Selector } from '../ui';
 
 /** Caja del cajero: abrir, ver el cuadre en vivo, registrar ingresos y egresos y cerrar con el efectivo contado. */
@@ -29,6 +30,7 @@ export function Caja({ perfil }: { perfil: Perfil }) {
     queryFn: () => api<TurnoVista[]>('/caja/turnos'),
   });
   const [verId, setVerId] = useState<string | null>(null);
+  const [cerradaId, setCerradaId] = useState<string | null>(null);
   const refrescar = () => qc.invalidateQueries({ queryKey: ['caja'] });
 
   return (
@@ -44,8 +46,16 @@ export function Caja({ perfil }: { perfil: Perfil }) {
       <div className="mt-5 max-w-3xl space-y-6">
         {actual.isPending && <p className="text-sm text-stone-500">Cargando…</p>}
         {actual.isError && <Aviso>{actual.error.message}</Aviso>}
+        {cerradaId && (
+          <div className="space-y-2 rounded-md bg-emerald-50 px-4 py-3 text-sm text-emerald-900">
+            <p className="font-medium">Caja cerrada. ¿Desea imprimir el cierre?</p>
+            <ImprimirCierre id={cerradaId} />
+          </div>
+        )}
         {actual.data === null && <Abrir onListo={refrescar} />}
-        {actual.data && <TurnoAbierto turnoId={actual.data.id} onCambio={refrescar} />}
+        {actual.data && (
+          <TurnoAbierto turnoId={actual.data.id} onCambio={refrescar} onCerrada={setCerradaId} />
+        )}
 
         <section>
           <h2 className="mb-2 text-sm font-semibold text-stone-700">
@@ -128,7 +138,15 @@ function Abrir({ onListo }: { onListo: () => void }) {
   );
 }
 
-function TurnoAbierto({ turnoId, onCambio }: { turnoId: string; onCambio: () => void }) {
+function TurnoAbierto({
+  turnoId,
+  onCambio,
+  onCerrada,
+}: {
+  turnoId: string;
+  onCambio: () => void;
+  onCerrada: (id: string) => void;
+}) {
   const [modo, setModo] = useState<'ninguno' | 'movimiento' | 'cerrar'>('ninguno');
   const d = useQuery({
     queryKey: ['caja', 'detalle', turnoId],
@@ -172,6 +190,7 @@ function TurnoAbierto({ turnoId, onCambio }: { turnoId: string; onCambio: () => 
           t={t}
           onListo={() => {
             setModo('ninguno');
+            onCerrada(t.id);
             onCambio();
           }}
           onCancelar={() => setModo('ninguno')}
@@ -353,6 +372,7 @@ function DetalleVista({ id }: { id: string }) {
         </p>
       )}
       <Movimientos d={t} onCambio={() => undefined} />
+      <ImprimirCierre id={t.id} />
     </div>
   );
 }

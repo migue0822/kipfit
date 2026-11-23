@@ -463,7 +463,15 @@ function Cajas({ periodo }: { periodo: { desde: string; hasta: string } }) {
           </div>
           <Bloque titulo="Cajas del período">
             <Tabla
-              cabeza={['Caja', 'Cajero', 'Efectivo esperado', 'Contado', 'Diferencia', 'Estado']}
+              cabeza={[
+                'Caja',
+                'Cajero',
+                'Efectivo esperado',
+                'Contado',
+                'Diferencia',
+                'Estado',
+                'Tirilla',
+              ]}
               filas={d.turnos.map((t) => [
                 `${t.numero} · ${formatoFechaHora(t.abiertoEn)}`,
                 t.cajero,
@@ -471,6 +479,25 @@ function Cajas({ periodo }: { periodo: { desde: string; hasta: string } }) {
                 t.contado ? formatoPesos(t.contado) : '—',
                 t.diferencia ? formatoPesos(t.diferencia) : '—',
                 t.estado === 'ABIERTO' ? 'Abierta' : 'Cerrada',
+                <span key="t" className="print:hidden">
+                  <a
+                    className="text-amber-800 hover:underline"
+                    href={`#/cierre?id=${t.id}&formato=resumido`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Resumida
+                  </a>
+                  {' · '}
+                  <a
+                    className="text-amber-800 hover:underline"
+                    href={`#/cierre?id=${t.id}&formato=completo`}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Completa
+                  </a>
+                </span>,
               ])}
             />
           </Bloque>

@@ -193,6 +193,10 @@ vencidas|sin`): documento único por empresa (normalizado: sin puntos ni espacio
 - Web: Tienda → Vender (POS: búsqueda o código exacto + Enter, cuenta, cliente opcional, pago combinado, cambio; tras cobrar,
   enlace a la tirilla `#/venta?id=`), Ventas (detalle, devolver, anular) e Informes → Tienda. Los roles existentes necesitan
   `tienda.vender` + `caja.operar` (Recepción ya los trae si es nueva). Suite e2e `tienda-ventas`.
+- **Tirilla de cierre** (`caja/CierreImpreso.tsx`, `#/cierre?id=&formato=resumido|completo`, `caja.operar`/`caja.supervisar`):
+  al cerrar la caja se ofrece imprimirla; también en el detalle de cada caja y en Informes → Cajas (columna Tirilla). Resumida =
+  cuadre, cobros por medio y observaciones; completa = además recibos, vendido por producto de la tienda, devoluciones en efectivo
+  e ingresos/egresos (`GET /caja/turnos/:id` trae `empresa`, `sucursal`, `productos` y `devoluciones`). Anulados salen tachados.
 - **Caja obligatoria en pantalla** (`caja/ExigirCaja.tsx`): Afiliados → «Nuevo afiliado» y Tienda → Vender solo muestran su
   contenido con la caja del usuario abierta; si no, piden abrirla (base en efectivo) allí mismo. El servidor ya la exige al cobrar.
 - **Recibo por WhatsApp** (`tienda/WhatsAppVenta.tsx`, `mensajeVenta` en `@kip/shared`): al cobrar y en el detalle de la venta;
