@@ -13,6 +13,7 @@ import { Caja } from './caja/Caja';
 import { Recibo } from './caja/Recibo';
 import { Inventario } from './tienda/Inventario';
 import { Productos } from './tienda/Productos';
+import { ExigirCaja } from './caja/ExigirCaja';
 import { Vender } from './tienda/Vender';
 import { VentaImpresa } from './tienda/VentaImpresa';
 import { Ventas } from './tienda/Ventas';
@@ -104,7 +105,9 @@ export function App() {
           {ruta === 'ingresos' && <Recepcion />}
           {ruta === 'caja' && <Caja perfil={p} />}
           {ruta === 'vender' && (
-            <Vender empresa={p.empresa?.nombreComercial ?? p.empresa?.razonSocial ?? ''} />
+            <ExigirCaja perfil={p} motivo="La venta se cobra por la caja.">
+              <Vender empresa={p.empresa?.nombreComercial ?? p.empresa?.razonSocial ?? ''} />
+            </ExigirCaja>
           )}
           {ruta === 'ventas' && <Ventas perfil={p} />}
           {ruta === 'productos' && <Productos perfil={p} />}
